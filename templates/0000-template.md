@@ -4,7 +4,7 @@
 # Summary
 [summary]: #summary
 
-One paragraph explanation of the feature.
+One paragraph explanation of the proposed specification change, API change, or feature.
 
 # Motivation
 [motivation]: #motivation
@@ -23,16 +23,18 @@ the reader has proficient knowledge on the existing PartiQL specification.
 - If applicable, provide sample error messages, deprecation warnings, or migration guidance.
 - If applicable, describe the differences between teaching this to existing PartiQL users and new PartiQL users.
 
-For implementation-oriented RFCs, this section should focus on how PartiQL contributors should think about the change, and give examples of its concrete impact.
+For spec-oriented RFCs, this section should focus on how implementations, based on the proposed specification change, will get impacted. This section should include any required grammar that accompanies the specification change. 
 For api-oriented RFCs, this section should focus on how PartiQL users would leverage or be affect by the changes.
 
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
-This is the technical portion of the RFC. Explain the design in sufficient detail that:
+This is the technical portion of the RFC, and may be omitted for specification change proposals.
+
+Explain the design in sufficient detail that:
 
 - Its interaction with other features is clear.
-- It is reasonably clear how the feature would be implemented.
+- It is reasonably clear how the feature or API would be implemented.
 - Corner cases are dissected by example.
 
 The section should return to the examples given in the previous section, and explain more fully how the detailed proposal makes those examples work.
@@ -45,8 +47,8 @@ Why should we *not* do this?
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
-- Why is this design the best in the space of possible designs?
-- What other designs have been considered and what is the rationale for not choosing them?
+- Why is this design/proposal the best in the space of possible designs?
+- Which other designs/proposals have been considered, and what is the rationale for not choosing them?
 - What is the impact of not doing this?
 
 # Prior art
@@ -55,7 +57,7 @@ Why should we *not* do this?
 Discuss prior art, both the good and the bad, in relation to this proposal.
 A few examples of what this can include are:
 
-- For specification proposals: Does this feature exist in SQL-92 or other SQL dialects?
+- For specification proposals: Does this feature exist in any ISO SQL standard or other SQL dialects?
 - For API changes: Do similar APIs exist in libraries such as Calcite? What are some details of the specific implementation?
 - Papers: Are there any published papers or great posts that discuss this? If you have some relevant papers to refer to, this can serve as a more detailed theoretical background.
 
