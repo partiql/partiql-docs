@@ -4,51 +4,67 @@
 # Summary
 [summary]: #summary
 
-This RFC defines the PartiQL specification for the operators: UNION, INTERSECT, and EXCEPT. The behavior of each operator conforms to the SQL standard in strict typing mode. In the absence of schemas, each operator is equivalent to the mathematical definitions of the respective multi-set operator where member equality is consistent with the equality in the *GROUP BY* clause.
+This RFC defines the PartiQL specification for the operators: UNION, INTERSECT, and EXCEPT. The behavior of each operator conforms to the SQL standard specification. Additionally, this RFC defines three new operators: OUTER UNION, OUTER INTERSECT, and OUTER EXCEPT which act on arbitrary values by coercing values to bags. For all operators, member equality is consistent with the *GROUP BY* clause.
 
 # Motivation
 [motivation]: #motivation
 
-The operators UNION, INTERSECT, and EXCEPT have been defined since SQL-92 specifications, yet these are missing from the PartiQL spec. In SQL, these operators are the typical bag (set if DISTINCT) union, intersect, and difference respectively for *union-compatible* relations. In the presence of schemas, the PartiQL set operators are compatible with the ISO SQL specification for set operators; however, PartiQL extends these operators to allow for combining arbitrary values such as bags of heterogenous tuples. SQL compatbility is discussed in the following section, and a detailed look at SQL set operators can be found in Appendix A.
+The operators UNION, INTERSECT, and EXCEPT have been defined since SQL-92 specifications, yet these are missing from the PartiQL specification. These operators are the typical multiset union, intersect, and difference respectively for compatible relations. Two relations *R1* and *R2* are compatible for set operators if they have the same number of columns and the *i*-th column of *R1* is comparable to the *i*-th column of *R2*. Comparability in PartiQL conforms to the SQL specification and is defined in Appendix B. SQL compatbility for set operators is discussed in the following section, and a detailed look can be found in Appendix A.
+
+The additional *OUTER* variants of each set operator are an extension to the SQL standard. These extended operators are simply the mathematical multi-set operators. This enables combining arbitrary values without compatibility concerns. Scalar values are coerced into singleton bags, and NULL and MISSING are coerced into the empty bag.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
 
 ## Definition
 
-Each bag operator has the form *q S q'* where *q* and *q'* are of type *\<query\>* and *S* is the operator. Additionally, the operator may be suffixed with *ALL* which indicates the output may have duplicate elements. In its absence, duplicates are eliminated from the final result. Arguments of the operators are coerced into bags with the following behavior.  
-
-- *NULL* and *MISSING* become the empty bag *<< >>*
-- A scalar value *v* becomes the singleton bag *<< v >>*
-- An array is coerced to a bag by discarding ordering
-
-**Figure 1**
-
-Let *A* and *B* be bags and *x* be an element in a bag. Define *M(x, A)* as the multiplicity of *x* in some bag *A*.
+The bag operators are
 ```
-UNION_ALL(A, B) = A MULTISET UNION B
+- UNION           [ALL|DISTINCT]
+- INTERSECT       [ALL|DISTINCT]
+- EXCEPT          [ALL|DISTINCT]
+- OUTER UNION     [ALL|DISTINCT]
+- OUTER INTERSECT [ALL|DISTINCT]
+- OUTER EXCEPT    [ALL|DISTINCT]
+```
+> https://en.wikipedia.org/wiki/Multiset
 
-INTERSECT_ALL(A, B):
-  - If A or B is << >>, then << >>
-  - Else << x >> with multiplicity m, for all x in A with x in B and m = min(M(x, A), M(x, B))
+Each bag operator has the form *q S q'* where *q* and *q'* are of type *\<query\>* and *S* is the operator. Additionally, the operator may be suffixed with *ALL* which indicates the output may have duplicate elements. In its absence, *DISTINCT* is implicit and duplicates are eliminated from the final result.
 
-EXCEPT_ALL(A, B):
-  - If A is << >>, then << >>
-  - If B is << >>, then A
-  - Else << x >> with multiplicity m, for all x in A with m = max(M(x, A) - M(x, B), 0)
+Let *T1* and *T2* be two compatible relations, and let *TR* be the result of a set operator. The standard SQL bag operators are defined as:
+```
+T1 UNION ALL T2     = MULTISET_UNION(T1, T2)
+T1 INTERSECT ALL T2 = MULTISET_INTERSECT(T1, T2)
+T1 EXCEPT ALL T2    = MULTISET_DIFFERENCE(T1, T2)
 
-UNION(A, B) = DISTINCT(UNION_ALL(A, B))
-
-INTERSECT(A, B) = DISTINCT(INTERSECT_ALL(A, B))
-
-EXCEPT(A, B) = DISTINCT(EXCEPT_ALL(A, B))
+T1 UNION DISTINCT T2     = DISTINCT(MULTISET_UNION(T1, T2))
+T1 INTERSECT DISTINCT T2 = DISTINCT(MULTISET_INTERSECT(T1, T2))
+T1 EXCEPT DISTINCT T2    = DISTINCT(MULTISET_DIFFERENCE(T1, T2))
 ```
 
-In strict-typing mode, the set operators behave just like the set operators defined in the SQL specification as discussed in the next section. Outside of strict-typing mode, these operators are the pure mathematical multi-set union, intersect, and except which enables the creation and combination of heterogneous bags (TODO polish this sentence).
+Let *V1* and *V2* be arbitrary values, and let *C* be a function which coerces a value to a bag. The *OUTER* operators are defined as
+```
+V1 OUTER UNION ALL V2     = MULTISET_UNION(F(V1), F(V2))
+V1 OUTER INTERSECT ALL V2 = MULTISET_INTERSECT(F(V1), F(V2))
+V1 OUTER EXCEPT ALL V2    = MULTISET_DIFFERENCE(F(V1), F(V2))
+
+V1 OUTER UNION DISTINCT V2     = DISTINCT(MULTISET_UNION(F(V1), F(V2)))
+V1 OUTER INTERSECT DISTINCT V2 = DISTINCT(MULTISET_INTERSECT(F(V1), F(V2)))
+V1 OUTER EXCEPT DISTINCT V2    = DISTINCT(MULTISET_DIFFERENCE(F(V1), F(V2)))
+```
+
+The coercion function *F* is defined for all PartiQL values (Appendix C) by:
+```
+F(absent_value) -> << >>               
+F(scalar_value) -> << scalar_value >> # singleton bag
+F(tuple_value)  -> << tuple_value >>  # singleton bag, see future extensions
+F(array_value)  -> bag_value          # discard ordering
+F(bag_value)    -> bag_value          # identity
+```
 
 ### SQL Compatibility
 
-In the presence of schema, the column descriptors for a table are known. These column descriptors are an ordered list of metadata objects which describe a column's: type, name, nullability, and more (see Appendix A). The column descriptors play an important role for set operators. Two relations *T1* and *T2* are said to be *union-compatible* if they have the same number of columns (\*) and the data type for the i-th column of *T1* and the data type for the i-th column of *T2* are comparable. Comparability and the resultant data type follow the same rules as the comparability rules and data types of results of aggregations defined in SQL-99 section 9.3.  
+In the presence of schema, the column descriptors for a table are known. These column descriptors are an ordered list of metadata objects which describe a column's: type, name, nullability, and more (see Appendix A). The column descriptors play an important role for set operators. Two relations *T1* and *T2* are said to be compatible if they have the same number of columns (\*) and the data type for the i-th column of *T1* and the data type for the i-th column of *T2* are comparable. Comparability and the resultant data type follow the same rules as the comparability rules and data types of results of aggregations defined in SQL-99 section 9.3.  
 
 Each set operator produces a new relation *TR* which has its own column descriptors. The exact details of the these column descriptors is discussed in Appendix A, as well as SQL-99 section 7.12. The specification states that, for SQL conformance:
 
@@ -60,11 +76,11 @@ Each set operator produces a new relation *TR* which has its own column descript
 - The i-th column of *TR* is nullable only if both the i-th columns of *T1* and *T2* are nullable.
 - If the set operator is *EXCEPT*, then the i-ith column of *TR* is nullable only if the i-th column of *T1* is nullable.
 
-These rules tell us, in the presence of schema, the set operators are valid when the argument relations are union-compatible; and the resultant column descriptors inherit their names and nullability from the column descriptors of the arguments.
+These rules tell us, in the presence of schema, the set operators are valid when the argument relations are set operator compatible; and the resultant column descriptors inherit their names and nullability from the column descriptors of the arguments.
 
-- \* — If the statement contains a *CORRESPONDING* clause, then the column descriptors of *T1* and *T2* will be compared by the delcared order of column names in the *CORRESPONDING* list.
+- \* If the statement contains a *CORRESPONDING* clause, then the column descriptors of *T1* and *T2* will be compared by the delcared order of column names in the *CORRESPONDING* list.
 
-## Examples
+## TODO Examples
 
 ### Guide
 
@@ -658,46 +674,85 @@ If the i-th column of T1 and T2 does not have the same name, then the name of i-
 
 Aligning PartiQL parser implementation with the PartiQL specification. Right now, the parser will parse the arguments of each set operator as an expression, and the parser does not support the corresponding clause. Here is what we should consider updating our specifcation grammar to. This uses the ANTLR syntax with rules in *\< \>* for clarity.
 
-```
+```antlr
 query
-  : <sfw_query>
-  | <expr_query>
+  : sfw_query
+  | expr_query
   ;
 
 sfw_query
-  : (WITH <query> AS <variable>)>
-    <select>
-    <from>
-    (WHERE <expr_query>)?
-    (GROUP BY <expr_query> (AS <variable>)? (',' <expr_query> (AS <variable)?)*)?
-    (HAVING <expr_query>)?
-    ((UNION|INTERSECT|EXCEPT) (ALL|DISTINCT)? <corr_spec>? <query>)?
-    (ORDER BY <sort_item> (',' <sort_item>)*)?
-    (LIMIT <expr_query>)?
-    (OFFSET <expr_query>)?
+  : (WITH query AS variable)
+    select from
+    (WHERE expr_query)?
+    (GROUP BY expr_query (AS variable)? (',' expr_query (AS variable)?)*)?
+    (HAVING expr_query)?
+    ((UNION|INTERSECT|EXCEPT) (ALL|DISTINCT)? corr_spec? query)?
+    (ORDER BY sort_item (',' sort_item)*)?
+    (LIMIT expr_query)?
+    (OFFSET expr_query)?
   ;
 
 expr_query
-  : ( <sfw_query> )
-  | <path_expr>
-  | <function> '(' (<expr_query> (',' <expr_query>)*)? ')'
-  | '{' (<expr_query> ':' <expr_query> (',' <expr_query> ':' <expr_query>)*)? '}'
-  | '[' (<expr_query> (',' <expr_query>)*)? ']'
-  | '<<' (<expr_query> (',' <expr_query>)*)? '>>'
-  | <sql_scalar_expr>
-  | <literal>
+  : ( sfw_query )
+  | path_expr
+  | function '(' (expr_query (',' expr_query)*)? ')'
+  | '{' (expr_query ':' expr_query (',' expr_query ':' expr_query)*)? '}'
+  | '[' (expr_query (',' expr_query)*)? ']'
+  | '<<' (expr_query (',' expr_query)*)? '>>'
+  | sql_scalar_expr
+  | literal
   ;
 
 path_expr
-  : <variable>
-  | '(' <expr_query> ')'
-  | <path_expr> '.' <attr_name>
-  | <path_expr> '.' '*'
-  | <path_expr> '[' <expr_query> ']'
-  | <path_expr> '[' '*' ']'
+  : variable
+  | '(' expr_query ')'
+  | path_expr '.' attr_name
+  | path_expr '.' '*'
+  | path_expr '[' expr_query ']'
+  | path_expr '[' '*' ']'
   ;
 
 corr_spec
-  : CORRESPONDING ( BY '(' <column_name> (',' <column_name>)* ')' )?
+  : CORRESPONDING ( BY '(' column_name (',' column_name)* ')' )?
+  ;
+```
+
+## APPENDIX C
+
+PartiQL Values
+
+```antlr
+value
+  : absent_value
+  | scalar_value
+  | tuple_value
+  | collection_value
+  ;
+
+absent_value
+  : NULL
+  | MISSING
+  ;
+
+scalar_value
+  : '`' ion_literal '`'
+  | literal
+  ;
+
+tuple_value
+  : '{' (string_value ':' value (',' string_value ':' value )*)? '}'
+  ;
+
+collection_value
+  : array_value
+  | bag_value
+  ;
+
+array_value
+  : '[' (value (',' value)*)? ']'
+  ;
+
+bag_value
+  : '<<' (value (',' value')*)? '>>'
   ;
 ```
