@@ -9,9 +9,9 @@ This RFC defines the PartiQL specification for the operators: UNION, INTERSECT, 
 # Motivation
 [motivation]: #motivation
 
-The operators UNION, INTERSECT, and EXCEPT have been defined since SQL-92 specifications, yet these are missing from the PartiQL specification. These operators are the typical multiset union, intersect, and difference respectively for compatible relations. Two relations *R1* and *R2* are compatible for set operators if they have the same number of columns and the *i*-th column of *R1* is comparable to the *i*-th column of *R2*. Comparability in PartiQL conforms to the SQL specification and is defined in Appendix B. SQL compatbility for set operators is discussed in the following section, and a detailed look can be found in Appendix A.
+The operators UNION, INTERSECT, and EXCEPT have been defined since SQL-92 specifications, yet these are missing from the PartiQL specification. These operators are the typical [multiset union, intersect, and difference](https://en.wikipedia.org/wiki/Multiset) respectively for compatible relations. Two relations *R1* and *R2* are compatible for set operators if they have the same number of columns and the *i*-th column of *R1* is comparable to the *i*-th column of *R2*. Comparability in PartiQL conforms to the SQL specification and is defined in Appendix D. SQL compatbility for set operators is discussed in the following section, and a detailed look can be found in Appendix A.
 
-The additional *OUTER* variants of each set operator are an extension to the SQL standard. These extended operators are simply the mathematical multi-set operators. This enables combining arbitrary values without compatibility concerns. Scalar values are coerced into singleton bags, and NULL and MISSING are coerced into the empty bag.
+The additional *OUTER* variants of each set operator are an extension to the SQL standard. These extended operators are simply the mathematical multiset operators. Each operand is treated as a multiset of tuples, and arbitrary values can be combined without compatibility concerns. Scalar values are coerced into singleton bags, and NULL and MISSING are coerced into the empty bag.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -27,11 +27,12 @@ The bag operators are
 - OUTER INTERSECT [ALL|DISTINCT]
 - OUTER EXCEPT    [ALL|DISTINCT]
 ```
-> https://en.wikipedia.org/wiki/Multiset
+> 
 
 Each bag operator has the form *q S q'* where *q* and *q'* are of type *\<query\>* and *S* is the operator. Additionally, the operator may be suffixed with *ALL* which indicates the output may have duplicate elements. In its absence, *DISTINCT* is implicit and duplicates are eliminated from the final result.
 
 Let *T1* and *T2* be two compatible relations, and let *TR* be the result of a set operator. The standard SQL bag operators are defined as:
+
 ```
 T1 UNION ALL T2     = MULTISET_UNION(T1, T2)
 T1 INTERSECT ALL T2 = MULTISET_INTERSECT(T1, T2)
@@ -72,47 +73,49 @@ Each set operator produces a new relation *TR* which has its own column descript
 - If the i-th columns of *T1* and *T2* share the name *C*, then the i-th column of *TR* will be named *C*.
 - Otherwise, the name of the i-th column of *TR* is implementation-dependent and must be unique amongst all other column names.
 
+> Note: Postgres, SQLite, and MySQL all use the name of the left-most relation's column.
+
 **Nullability Rule**
-- The i-th column of *TR* is nullable only if both the i-th columns of *T1* and *T2* are nullable.
+- The i-th column of *TR* is not nullable only if both the i-th columns of *T1* and *T2* are known not nullable. Else, the i-th column of *TR* is possibly nullable.
 - If the set operator is *EXCEPT*, then the i-ith column of *TR* is nullable only if the i-th column of *T1* is nullable.
 
 These rules tell us, in the presence of schema, the set operators are valid when the argument relations are set operator compatible; and the resultant column descriptors inherit their names and nullability from the column descriptors of the arguments.
 
 - \* If the statement contains a *CORRESPONDING* clause, then the column descriptors of *T1* and *T2* will be compared by the delcared order of column names in the *CORRESPONDING* list.
 
-## TODO Examples
+## Examples
 
 ### Guide
 
-#### Union
-1. Homogenous Bags Permissive Typing
-2. Homogenous Bags Strict Typing
-3. Heterogenous Bags Strict Typing
-4. Heterogenous Bags Permissive Typing
-
-#### Intersect, Except, and Special Cases
-1. Basic Intersect
-2. Basic Except
-3. Singleton bag coercion
-4. NULL and MISSING coercion
+1. Union of Compatible Relations
+2. Union of Compatible Relations; Mismatch Column Names
+  1. Without *CORRESPONDING* Clause
+  2. With *CORRESPONDING* Clause
+  3. Using *OUTER UNION*
+3. Union of Heterogenous Relations
+4. Intersection of Compatible Relations
+5. Difference of Compatible Relations
+6. Value Coercion
+7. NULL and MISSING Coercion
 
 ### Environment
 
-```
--- Each bag of employees is *almost* the same! Let's see how we can compose them.
+```sql
+-- Each bag of employees is *almost* the same. Let's see how we can compose them.
+
 !add_to_global_env { 
   'hr': { 
     'employees': <<
       { 'name': 'Bob Smith',   'title': 'Consultant' }, 
       { 'name': 'Susan Smith', 'title': 'Manager' },
-      { 'name': 'Jane Smith',  'title': 'DEI'}
+      { 'name': 'Jane Smith',  'title': 'DEI' }
     >>
   },
   'accounting': { 
     'employees': <<
       { 'level': 3, 'name': 'Quincy Jones',   'title': 'Director' }, 
       { 'level': 2, 'name': 'James Earl Jones', 'title': 'Manager' },
-      { 'level': 1, 'name': 'Indiana Jones',  'title': 'Intern'}
+      { 'level': 1, 'name': 'Indiana Jones',  'title': 'Intern' }
     >>
   },
   'engineering': { 
@@ -126,9 +129,9 @@ These rules tell us, in the presence of schema, the set operators are valid when
 } 
 ```
 
-### Strict Mode Example Column Descriptors
+### Column Descriptors
 
-In strict-typing mode, we can define the *hr.employees, accounting.employees, engineering.employees* relations to have the following schemas.
+The static types of *hr.employees*, *accounting.employees*, and *engineering.employees* relations are represented by the column descriptors below.
 
 ```
               hr.employees
@@ -154,9 +157,10 @@ In strict-typing mode, we can define the *hr.employees, accounting.employees, en
 | 1       | NAME  | String | NO       |
 ```
 
-### Union Examples
+### Examples
 
-**Union 1** — Homogenous Bags — Both strict and permissive typing would produce this result.
+#### Example 1 — Union of Compatible Relations
+
 ```sql
 SELECT name, title FROM hr.employees
 UNION ALL
@@ -195,9 +199,11 @@ SELECT name, title FROM engineering.employees
 -- OK!
 ```
 
-**Union 2** — Homogenous Bags with strict typing
+#### Example 2 — Union of Compatible Relations; Mismatch Column Names
 
-Here is **union 1** with strict typing, but the **names** of the column descriptors do not match. Notice the lack of selection list here. These two relations are union-compatible because the i-th column of *hr.employees* is comparable to the i-th column of *engineering.employees*, but notice the column names. This behavior conforms to SQL specification whereby, if the column names do not match, then the column name is implementation-dependent i.e. it is not derived from any particular value.
+Here is **Example 1** but the **names** of the column descriptors do not match. Notice the lack of selection list here. These two relations are union-compatible because the i-th column of *hr.employees* is comparable to the i-th column of *engineering.employees*, but notice the column names. This behavior conforms to SQL specification whereby, if the column names do not match, then the column name is implementation-dependent i.e. it is not derived from any particular value. The column names are taken from the left-most relation.
+
+**Example 2.1** — Without *CORRESPONDING* Clause
 
 ```sql
 SELECT * FROM hr.employees
@@ -206,32 +212,32 @@ SELECT * FROM engineering.employees
 
 <<
   {
-    '_0': 'Bob Smith',
-    '_1': 'Consultant'
+    'name': 'Bob Smith',
+    'title': 'Consultant'
   },
   {
-    '_0': 'Susan Smith',
-    '_1': 'Manager'
+    'name': 'Susan Smith',
+    'title': 'Manager'
   },
   {
-    '_0': 'Jane Smith',
-    '_1': 'DEI'
+    'name': 'Jane Smith',
+    'title': 'DEI'
   },
   {
-    '_0': 'Manager',
-    '_1': 'Paul McCharmly'
+    'name': 'Manager',          -- !! column name from left-most relation
+    'title': 'Paul McCharmly'
   },
   {
-    '_0': 'SDE',
-    '_1': 'George Parasol'
+    'name': 'SDE',              -- !!
+    'title': 'George Parasol'
   },
   {
-    '_0': 'Principal SDE',
-    '_1': 'Ringo Stone'
+    'name': 'Principal SDE',    -- !!
+    'title': 'Ringo Stone'
   },
   {
-    '_0': 'Intern',
-    '_1': 'Eric Lennon'
+    'name': 'Intern',           -- !!
+    'title': 'Eric Lennon'
   }
 >>
 -- OK!
@@ -239,52 +245,42 @@ SELECT * FROM engineering.employees
 -- Result Column Descriptors
 -- | Ordinal | Name  | Type   | Nullable |
 -- |---------|-------|--------|----------|
--- | 0       | _0    | String | NO       |
--- | 1       | _1    | String | NO       |
+-- | 0       | name  | String | NO       |
+-- | 1       | title | String | NO       |
 ```
 
-Notice that we have some issues with the meaning of our keys/columns. For the first three structs/tuples, key *_0* contains a name and *_1* contains a title; yet it is the opposite for the last four structs/tuples. We can fix this by using the SQL *CORRESPONDING* clause.
+Notice that we have some issues with the meaning of our keys/columns. For the first three structs/tuples, the *0*-th column contains a name and *1*-th column contains a title; yet it is the opposite for the last four structs/tuples. We can fix this by using the SQL *CORRESPONDING* clause.
+
+**Example 2.2** — With *CORRESPONDING* Clause
 
 ```sql
 SELECT * FROM hr.employees
 UNION ALL CORRESPONDING BY ( name, title )
 SELECT * FROM engineering.employees
 
--- Equivalent to *Union 1*
+-- Equivalent
+
+TABLE hr.employees
+UNION ALL CORRESPONDING BY ( name, title )
+TABLE engineering.employees
+
+-- Equivalent, *Example 1*
 
 SELECT name, title FROM hr.employees
 UNION ALL
 SELECT name, title FROM engineering.employees
 ```
 
-**Union 3** — Heterogenous Bags with Strict Typing
+**Example 2.3** — Using *OUTER UNION*
 
-Here we attempt to union the job titles in HR and Engineering, but there is a mistake. In the absence of schema, the bags produced by *T1* and *T2* are unioned as two bags of structs, but in strict-typing mode, we need to look at the column descriptors. This behavior conforms to the SQL specification.
-
-```sql
-SELECT * FROM hr.employees               -- T1
-UNION
-SELECT title FROM engineering.employees  -- T2
--- ERROR!
--- T1 and T2 are not union-compatible in strict-typing mode
-```
-
-```
-       Column Descriptors of T1                          Column Descriptors of T2 
-
-| Ordinal | Name  | Type   | Nullable |           | Ordinal | Name  | Type   | Nullable |       
-|---------|-------|--------|----------|           |---------|-------|--------|----------|
-| 1       | NAME  | String | NO       |  >UNION<  | 0       | TITLE | String | NO       |
-| 2       | TITLE | String | NO       |
-```
-
-**Union 4** — Heterogenous Bag with Permissive Typing
-
-Let's do a simple union that would cause confusion in strict mode (**Union 2**), but is no problem for permissive mode. Without schemas, the union operators is a pure multi-set union. This shows how PartiQL's UNION operator's functionality is a superset of the SQL UNION operator.
+Here is Example 2.1 but using *OUTER UNION*. In this case, we are not concerned about relation compatibility because the *OUTER UNION* is simply the union of the bags of tuples.
 
 ```sql
-TABLE hr.employees UNION TABLE engineering.employees -- same as Union 2 example, but permissive mode
+SELECT * FROM hr.employees
+OUTER UNION ALL
+SELECT * FROM engineering.employees
 
+-- Note the tuple keys
 <<
   {
     'name': 'Bob Smith',
@@ -318,11 +314,60 @@ TABLE hr.employees UNION TABLE engineering.employees -- same as Union 2 example,
 -- OK!
 ```
 
-Notice how the structs keep their keys! In permissive mode, there's no notion of "i-th column descriptor" so we do not compare them! The UNION is the simple multi-set union of the structs in the *hr.employees* and *engineering.employees* bags.
+#### Example 3 — Union of Heterogenous Relations
 
-### Intersect, Except, and Special Case Examples
+Here we attempt to union the job titles in HR and Engineering, but there is a mistake. The known static type of *T1* is not compatible with the known static type of *T2*. The column descriptors of each relation are shown below. These relations are not compatible for the standard SQL union.
 
-**Basic Intersect**
+```sql
+SELECT * FROM hr.employees               -- T1
+UNION
+SELECT title FROM engineering.employees  -- T2
+-- ERROR! T1 and T2 are not union-compatible
+
+--       Column Descriptors of T1                          Column Descriptors of T2 
+
+-- | Ordinal | Name  | Type   | Nullable |             | Ordinal | Name  | Type   | Nullable |       
+-- |---------|-------|--------|----------|             |---------|-------|--------|----------|
+-- | 1       | NAME  | String | NO       |  > UNION <  | 0       | TITLE | String | NO       |
+-- | 2       | TITLE | String | NO       |
+
+-- Equivalent, but with OUTER UNION
+
+SELECT * FROM hr.employees
+OUTER UNION
+SELECT title FROM engineering.employees
+
+<<
+  {
+    'name': 'Bob Smith',
+    'title': 'Consultant'
+  },
+  {
+    'name': 'Susan Smith',
+    'title': 'Manager'
+  },
+  {
+    'name': 'Jane Smith',
+    'title': 'DEI'
+  },
+  {
+    'title': 'Manager'
+  },
+  {
+    'title': 'SDE'
+  },
+  {
+    'title': 'Principal SDE'
+  },
+  {
+    'title': 'Intern'
+  }
+>>
+-- OK!
+```
+
+#### Example 4 — Intersection of Compatible Relations
+
 ```sql
 SELECT title FROM hr.employees INTERSECT SELECT title FROM engineering.employees
 
@@ -334,7 +379,8 @@ SELECT title FROM hr.employees INTERSECT SELECT title FROM engineering.employees
 -- OK!
 ```
 
-**Basic Except** — Job titles unique to the engineering department.
+#### Example 5 — Difference of Compatible Relations
+
 ```sql
 SELECT title FROM engineering.employees EXCEPT (
   SELECT title FROM hr.employees
@@ -353,16 +399,13 @@ SELECT title FROM engineering.employees EXCEPT (
 -- OK!
 ```
 
-**Special Cases**
-```sql
--- result is the same as `TABLE engineering.employees`
-SELECT * FROM engineering.employees EXCEPT << >> 
+#### Example 6 — Value Coercion
 
--- result is the empty bag
-SELECT * FROM engineering.employees INTERSECT << >>
+```sql
 
 -- Coercion of single value
-SELECT * FROM << 1 >> UNION 'A'
+SELECT * FROM << 1 >> OUTER UNION 'A'
+SELECT * FROM << 1 >> OUTER UNION << 'A' >> -- equivalent
 <<
   {
     '_1': 1
@@ -370,14 +413,70 @@ SELECT * FROM << 1 >> UNION 'A'
   'A'
 >>
 -- OK!
+
+SELECT * FROM << 1 >>
+UNION
+SELECT * FROM << 'A' >>
+-- ERROR! Not union-compatible
+
+SELECT * FROM << 1 >>
+OUTER UNION
+SELECT * FROM << 'A' >>
+<<
+  {
+    '_1': 1
+  },
+  {
+    '_1': 'A'
+  }
+>>
+-- OK!
 ```
+
+#### Example 7 — NULL and MISSING Coercion
+
+```sql
+-- result is the same as `TABLE engineering.employees`
+SELECT * FROM engineering.employees OUTER EXCEPT << >> 
+TABLE engineering.employees OUTER UNION NULL              -- equivalent
+TABLE engineering.employees OUTER UNION MISSING           -- equivalent
+
+TABLE engineering.employees UNION << MISSING >>
+-- ERROR!
+
+TABLE engineering.employess OUTER UNION << MISSING >>
+<<
+  {
+    'title': 'Manager',
+    'name': 'Paul McCharmly'
+  },
+  {
+    'title': 'SDE',
+    'name': 'George Parasol'
+  },
+  {
+    'title': 'Principal SDE',
+    'name': 'Ringo Stone'
+  },
+  {
+    'title': 'Intern',
+    'name': 'Eric Lennon'
+  }
+  MISSING
+>>
+-- OK!
+
+-- result is the empty bag
+SELECT * FROM engineering.employees OUTER INTERSECT << >>
+TABLE engineering.employees OUTER INTERSECT NULL          -- equivalent
+TABLE engineering.employees OUTER INTERSECT MISSING       -- equivalent
+```
+
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
 We do not recognized drawbacks to implementing these features as these are clearly defined in the specification yet missing from the implementation.
-
-TODO: Stating no drawbacks might come off as naive.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -397,53 +496,50 @@ As previously covered, these operators are defined in both the ISO SQL spec as w
 
 With respect to the above, PartiQL has chosen to produce heterogenous bags in permissive mode and homogenous bags or error in conventional typing mode. PartiQL has chosen to coerce NULL and MISSING to the empty bag; but allows for a singleton bag of NULL or MISSING. Finally, equality in bag operators is consistent with equality used in the *GROUP BY* clause.
 
-The following feature matrix is Table 12 of from the SQL++ paper.
-
-**Feature Matrix for Bag Operators**
-
-| Database | UNION ALL | INTERSECT ALL | EXCEPT ALL | UNION | INTERSECT | EXCEPT |
-| -------- | --------- | ------------- | ---------- | ----- | --------- | ------ |
-| SQL      | [x]       | [x]           | [x]        | [x]   | [x]       | [x]    |
-| Hive     | [x]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-| Jaql     | [x]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-| Pig      | [x]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-| CQL      | [ ]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-| JSONiq   | [x]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-| MongoDB  | [ ]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-| N1QL     | [ ]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-| AQL      | [ ]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-| BigQuery | [x]       | [ ]           | [ ]        | [ ]   | [ ]       | [ ]    |
-
-TODO: I don't think the feature matrix is that helpful. Would a better use of this section for describing *how* the other implementations behave? This is covered in [1].
-
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
-- TODO FILL IN FROM PR REVIEWS
-
+- Questions in PR: https://github.com/partiql/partiql-docs/pull/7
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-We can consider introducing extended bag operators for the key-value pairs of Ion structs. These extended operators would allow for joining or combining two structs key-value pairs. Keys are unique in structs, so we must make a decision on how to behave when a key appears in both the left and right operands.
+We can consider introducing extended bag operators for Ion structs. These extended operators would allow for joining or combining two structs' key-value pairs. That is, these operators would treat each struct as bag of key-value tuples, and the semantics of the set operators apply. 
 
-Let *S* and *S'* be two structs. Let *k* be a key in both *S* and *S'* with values *s* and *s'* respectively. If a key does not appear in one of *S* or *S'*, then it is treated as *MISSING*. The operators could be defined as below.
+
+Let *S* be a struct with key-value pairs *(k_i, v_i)* for *i* in 0 to *n*. We map a key-value pair to a tuple with the following function.
 
 ```
-S UNION S'     -> { k: s UNION s' }
-S INTERSECT S' -> { k: s INTERSECT s' }
-S EXCEPT S'    -> { k: s EXCEPT s' }
+(key, value) -> { "k": k_i, "v": v_i }
 ```
 
-For example,
+We can then map *S* to a bag by applying the key-value pair mapping function to all pairs.
 
-Without this extension, UNION would behave like so. Each operand is coerrced into a singleton bag.
 ```
+S = {
+  k_0: v_0,
+  k_1: v_1,
+  ...
+  k_n: v_n
+}
+
+-- as bag
+
+<<
+  { "k": k_0, "v": v_0 },
+  { "k": k_1, "v": v_1 },
+  ...
+  { "k": k_n, "v": v_n }
+>> 
+```
+
+Without this extension, OUTER UNION would behave like so. Each operand is coerrced into a singleton bag.
+
+```sql
 SELECT * FROM { 'A': 0, 'B': 1 }
-UNION
+OUTER UNION
 SELECT * FROM { 'A': 2, 'B': 3, 'C': 4 }
-   |
-==='
+
 <<
   {
     'A': 0,
@@ -455,18 +551,33 @@ SELECT * FROM { 'A': 2, 'B': 3, 'C': 4 }
     'C': 4
   }
 >>
----
-OK!
+-- OK!
 ```
 
-Extending UNION to Ion structs would behave like so.
+Extending UNION to Ion structs might behave like so.
 
-```
+```sql
 SELECT * FROM { 'A': 0, 'B': 1 }
-UNION
+STRUCT UNION
 SELECT * FROM { 'A': 2, 'B': 3, 'C': 4 }
-   |
-==='
+
+<<
+  {
+    'A': 0,
+    'B': 1,
+    'C': 4
+  }
+>>
+-- OK!
+```
+
+Alternatively, we could combined the values by keys.
+
+```sql
+SELECT * FROM { 'A': 0, 'B': 1 }
+STRUCT OUTER UNION
+SELECT * FROM { 'A': 2, 'B': 3, 'C': 4 }
+
 <<
   {
     'A': << 0, 2 >>,
@@ -474,103 +585,18 @@ SELECT * FROM { 'A': 2, 'B': 3, 'C': 4 }
     'C': << 4 >>
   }
 >>
----
-OK!
+-- OK!
 ```
 
-For INTERSECT and EXCEPT, if the value result is `<< >>`, then the key is removed from the resultant struct. Consider the following
-
-```
-SELECT * FROM { 'A': 0, 'B': 1 }
-INTERSECT
-SELECT * FROM { 'A': 2, 'B': 3, 'C': 4 }
-   |
-==='
-<<
-  {
-    'A': << >>,
-    'B': << >>,
-    'C': << >>
-  }
->>
----
-OK!
-
--- Which becomes
-   |
-==='
-<<
-  {}
->>
----
-OK!
-
-SELECT * FROM { 'first_names': ['jack', 'jill'], 'last_names': ['smith', 'jones', 'johnson'] }
-INTERSECT
-SELECT * FROM { 'first_names': ['jack', 'john'], 'last_names': ['smith', 'snow'] }
-   |
-==='
-<<
-  {
-    'first_names': << 'jack' >>,
-    'last_names': << 'smith' >>
-  }
->>
----
-OK!
-```
-
-EXCEPT examples,
-```
-SELECT * FROM { 'A': 0, 'B': 1 } EXCEPT { 'A': 2, 'B': 3, 'C': 4 }
-   |
-==='
-<<
-  {
-    'A': << 0 >>,
-    'B': << 1 >>
-  }
->>
----
-OK!
-
-SELECT * FROM { 'A': 0, 'B': 1 }
-EXCEPT
-SELECT * FROM { 'A': 0, 'B': 3 }
-   |
-==='
-<<
-  {
-    'B': << 1 >>
-  }
->>
----
-OK!
-
-SELECT * FROM { 'first_names': ['jack', 'jill'], 'last_names': ['smith', 'jones', 'johnson'] }
-EXCEPT
-SELECT * FROM { 'first_names': ['jack'], 'last_names': ['smith'] }
-   |
-==='
-<<
-  {
-    'first_names': << 'jill' >>,
-    'last_names': << 'jones', 'johnson' >>
-  }
->>
----
-OK!
-```
-
+This has been included for future extension because it is related to the set operators, but is not in the SQL specifcation nor will it be added to the PartiQL specification.
 
 # Appendices
 
 ## Appendix A — SQL Set Operators
 
- http://web.cecs.pdx.edu/~len/sql1999.pdf
+The goal of this appendix is to clearly define the behavior of column descriptors for SQL-99 conformant set operators.
 
-### Goal
-The goal of this document is to clearly define the behavior of column descriptors for SQL-99 conformant set operators.
+http://web.cecs.pdx.edu/~len/sql1999.pdf
 
 ### Definitions
 
@@ -670,9 +696,9 @@ If the i-th column of T1 and T2 have the same name *C*, then the i-th column of 
 **Rule 4**
 If the i-th column of T1 and T2 does not have the same name, then the name of i-th column of TR is implementation-dependent and unique among all other column names.
 
-## Appendix B
+## Appendix B — PartiQL Set Operator Grammar
 
-Aligning PartiQL parser implementation with the PartiQL specification. Right now, the parser will parse the arguments of each set operator as an expression, and the parser does not support the corresponding clause. Here is what we should consider updating our specifcation grammar to. This uses the ANTLR syntax with rules in *\< \>* for clarity.
+Aligning PartiQL parser implementation with the PartiQL specification. Right now, the parser will parse the arguments of each set operator as an expression, and the parser does not support the corresponding clause. Here is what we should consider updating our specifcation grammar to.
 
 ```antlr
 query
@@ -717,9 +743,7 @@ corr_spec
   ;
 ```
 
-## APPENDIX C
-
-PartiQL Values
+## APPENDIX C — PartiQL Values
 
 ```antlr
 value
@@ -756,3 +780,23 @@ bag_value
   : '<<' (value (',' value')*)? '>>'
   ;
 ```
+
+## Appendix D — Column Type Comparability
+
+SQL defines two types as comparable if their values are comparable. This is a brief overview of comparability as defined by the SQL-99 specification. This is section is included for aiding the reader, not as a definitive reference.
+
+> **comparable:** The characteristic of values that permits one value to be compared with another value. Also said of data types: Two data types are comparable if values of those data types are comparable. If one of the two data types is a user-defined type, then both shall be in the same subtype family. See Subclause 4.12, ‘‘Type conversions and mixing of data types’’.
+
+### Subclause 4.12
+
+- Values of the data types NUMERIC, DECIMAL, INTEGER, SMALLINT, FLOAT, REAL, and DOUBLE PRECISION are numbers and are all mutually comparable.
+- CHARACTER, CHARACTER VARYING, and CHARACTER LARGE OBJECT are mutually comparable if and only if they are taken from the same character repertoire (ASCII, UNICODE).
+- When binary string values are compared, they must have exactly the same length (in octets) to be considered equal. Binary string values can only be compared for equality.
+- Values corresponding to the data types BIT and BIT VARYING are always mutually comparable and are mutually assignable
+- Values corresponding to the data type boolean are always mutually comparable and are mutually assignable.
+- Values corresponding to row types are mutually comparable if and only if both have the same degree and every field in one row type is mutually comparable to the field in the same ordinal position of the other row type.
+- Two collections are comparable if and only if they are of the same collection type and their element types are comparable
+- Items of type datetime are mutually comparable only if they have the same <primary datetime field>s.
+- Year-month intervals are mutually comparable only with other year-month intervals
+- Day-time intervals are mutually comparable only with other day-time intervals.
+- Two values V1 and V2 of whose declared types are user-defined types T1 and T2 are comparable if and only if T1 and T2 are in the same subtype family and each have some comparison type CT1 and CT2, respectively
