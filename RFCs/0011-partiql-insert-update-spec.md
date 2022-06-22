@@ -6,9 +6,11 @@
 
 [summary]: #summary
 
-This RFC specifies PartiQL's syntax and semantics for insert-or-update—also known as UPSERT—as part of PartiQL 
-Data Manipulation Language (DML). UPSERT is an informal term for a statement that denotes inserting or updating a set of
-data to a target database’s table based on existing availability condition of that data in the same table.
+Summary
+
+This RFC specifies PartiQL's syntax and semantics for insert-or-update—also known as UPSERT—and insert-or-replace as part 
+of PartiQL Data Manipulation Language (DML). UPSERT is an informal term for a statement that denotes inserting or updating 
+a set of data to a target database’s table based on existing availability condition of that data in the same table.
 
 # Motivation
 
@@ -76,77 +78,108 @@ in [Key Words RFC2119](https://datatracker.ietf.org/doc/html/rfc2119).
 Figure 1. illustrate the BNF grammar corresponding to PartiQL’s `INSERT INTO ... ON CONFLICT` statements. 
 See Appendix 1. for the Grammar conventions.
 
-Note: all the definitions that are missing from the Grammar refer to the definitions that are already in SQL-92 standard.
+Note:
+
+* All the definitions that are missing from the Grammar refer to the definitions that are already in SQL-92 standard.
+* <index expr> and <index predicate> will be defined in a separate RFC.
 
 ```EBNF
-<insert statement> ::=
-    INSERT INTO <table name> [ AS <alias> ] [  ( <attr name> [, <attr name> ]... ) ]
-        <value expr>
+<insert statement> ::= INSERT INTO <table name> [ AS <alias> ] 
+    [  ( <attr name> [, <attr name> ]... ) ]
+        <values>
     [ ON CONFLICT [ <conflict target> ] <conflict action> ]
 
-<value expr> ::= { DEFAULT VALUES | <values clause>
-      | <bag value> | <sub-select> }
+<values> ::= DEFAULT VALUES | <values clause>
+      | <bag value> | <sfw query>
 
-<values clause> ::= VALUES
-    ( { <expr> | DEFAULT } [, { <expr> | DEFAULT } ]...) [,...]
+<values clause> ::= VALUES <value> [, <value>]...
+
+<value> ::= ( { <value expr> | DEFAULT } [, { <value expr> | DEFAULT } ]...)
 
 <conflict target> ::=
-    ( { <index attr name> | <index expression> } [, ...] )
+    ( <index target> [, <index target>]... )
       [ WHERE <index predicate> ]
     | ( { <primary key> | <composite primary key> } )
     | ON CONSTRAINT <constraint name>
 
-<conflict action> ::= DO NOTHING
-    | <do update>
-    | <do replace>
+<index target> ::= <index attr name> | <index expr>
 
-<do update> ::= DO UPDATE
-    EXCLUDED
-    | SET {
-        {
-            <attr name> = { <expr> | DEFAULT }
-            | ( <attr name> [, <attr name>]... ) = ( { <expr> | DEFAULT } [, ...] )
-            | ( <attr name> [, <attr name>]... ) = ( <sub-select> )
-        } [, ...]
-        | <bag value>
+<conflict action> ::= DO NOTHING 
+    | DO UPDATE <do update>
+    | DO REPLACE <do replace>
+
+<do update> ::= EXCLUDED
+        | SET {
+          <attar values> [, <attr values>]...
+        | <tuple value>
       }
    [ WHERE <condition> ]
 
-<do replace> ::= DO REPLACE { <tuple value> | EXCLUDED }
+<do replace> ::= SET {
+        <attar values> [, <attr values>]...
+            | <tuple value>
+      }
+   [ WHERE <condition> ]
+
+<attr values> ::=  {
+            <attr name> = { <value expr> | DEFAULT }
+            | ( <attr name> [, <attr name>]... ) = <value>
+            | ( <attr name> [, <attr name>]... ) = ( <sfw query> )
+        }
 
 <primary key> ::= <attr name>
 
-<composite primary key> ::= <attr name> [, <attr name> ]
+<composite primary key> ::= <attr name>, <attr name> [, <attr name> ]...
 
-(* The follwowing are derived directly from PartiQL's spec. *)
-<value> ::= <absent value>
-    | <scalar value>
+<value expr> ::= <partiql value>
+     | <sql value expr>
+
+<partiql value> ::= NULL
+    | <ion value>
     | <tuple value>
     | <collection value>
 
-<absent value ::= NULL
-    | MISSING
+<sql value expr> ::= <sql expression>
 
-<scalar value> :== <backtick> <ion literal> <backtick>
-    | sql literal
+<ion value> ::= <backtick> <ion literal> <backtick>
 
 <tuple value> ::= <l curly brace> <r curly brace>
-    | <l curly brace> <string value> : <value> [, <string value> : <value>]... <r curly brace>
-
+    | <l curly brace> <string value> : <partiql value> [, <string value> : <partiql value>]... <r curly brace>
 
 <collection value> ::= <array value>
     | <bag value>
 
-<array value> :== <left bracket> { <value> [, <value>]... } <right bracket>
+<array value> ::= <left bracket> { <partiql value> [, <partiql value>]... } <right bracket>
 
-<bag value> :== <opening bag> { <value> [, <value>]... } <cloding bag>
+<bag value> ::= <opening bag> { <partiql value> [, <partiql value>]... } <closing bag>
+
+(* See PartiQL spec. figure 3: BNF Grammar for PartiQL Queries:
+    https://partiql.org/assets/PartiQL-Specification.pdf *)
+<sfw query>
+
+<index attr name> ::= <attr name>
+<attr name> ::= <identifier>
+<constraint name> ::= <identifier>
 
 (* Literals *)
-<l curly brace> :== {
-<r curly brace> :== }
-<left bracket>  :== [
-<right bracket> :== ]
-<backtick>  :== `
+<l curly brace> ::= 
+  “{”
+<r curly brace> ::=
+  “}”
+<left bracket> ::=
+  “[”
+<right bracket> ::=
+  “]”
+<backtick> ::=
+  `
+<opening bag> ::=
+  <<
+<closing bag> ::=
+  >>
+<left paren> ::=
+  “(”
+ <right paren> ::=
+  “)”
 ```
 
 ## 3. Description
@@ -175,10 +208,8 @@ in the Schema.
 When attribute names are omitted and `VALUES <bag value>` is provided, the values in `<bag value>` MUST include required
 attribute–value pairs and MAY include optional or undeclared attribute-value pairs.
 
-When attribute names are provided, they can be listed in any order. Each required attribute absent in the explicit or
-implicit attribute list SHOULD be filled with a default value, either its declared default value or an implementation of
-null. Explicit attribute list is when target attributes are specified using the grammar. Implicit is
-when they’re omitted.
+When attribute names are provided, they can be listed in any order. Each required attribute that is omitted in the 
+provided attributes, SHOULD be filled with a default value, either its declared default value or an implementation of null.
 
 If the expression for any attribute is not of the correct data type, automatic type conversion i.e. type coercion MAY
 be attempted.
