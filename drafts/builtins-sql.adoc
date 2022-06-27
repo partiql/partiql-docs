@@ -309,13 +309,7 @@ a|
 |Returns the number of bits in _x_
 
 |CHAR_LENGTH
-|char_length
-a|
-* `(x: text) -> text`
-|Returns the number of characters in _x_
-
-|CHARACTER_LENGTH
-|character_length
+|char_length, character_length
 a|
 * `(x: text) -> text`
 |Returns the number of characters in _x_
