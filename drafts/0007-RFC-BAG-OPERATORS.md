@@ -11,7 +11,7 @@ This RFC defines the PartiQL specification for the operators: UNION, INTERSECT, 
 
 The operators UNION, INTERSECT, and EXCEPT have been defined since SQL-92 specifications, yet these are missing from the PartiQL specification. These operators are the typical [multiset union, intersect, and difference](https://en.wikipedia.org/wiki/Multiset) respectively for compatible relations. Two relations *R1* and *R2* are compatible for set operators if they have the same number of columns and the *i*-th column of *R1* is comparable to the *i*-th column of *R2*. Comparability in PartiQL conforms to the SQL specification and is defined in Appendix D. SQL compatbility for set operators is discussed in the following section, and a detailed look can be found in Appendix A.
 
-The additional *OUTER* variants of each set operator are an extension to the SQL standard. These extended operators are simply the mathematical multiset operators. Each operand is treated as a multiset of tuples, and arbitrary values can be combined without compatibility concerns. Scalar values are coerced into singleton bags, and NULL and MISSING are coerced into the empty bag.
+The additional *OUTER* variants of each set operator are an extension to the SQL standard. These extended operators are the mathematical multiset operators, and operands are combined without compatibility concerns. These variants allow for combining any value by coercing the arguments to a multiset (bag). A scalar values is coerced into a singleton bag; a list is coerced to a bag by discarding ordering; NULL and MISSING are coerced into the empty bag.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -20,12 +20,9 @@ The additional *OUTER* variants of each set operator are an extension to the SQL
 
 The bag operators are
 ```
-- UNION           [ALL|DISTINCT]
-- INTERSECT       [ALL|DISTINCT]
-- EXCEPT          [ALL|DISTINCT]
-- OUTER UNION     [ALL|DISTINCT]
-- OUTER INTERSECT [ALL|DISTINCT]
-- OUTER EXCEPT    [ALL|DISTINCT]
+- [OUTER] UNION     [ALL|DISTINCT]
+- [OUTER] INTERSECT [ALL|DISTINCT]
+- [OUTER] EXCEPT    [ALL|DISTINCT]
 ```
 > 
 
