@@ -10,14 +10,6 @@ This document contains the builtin functions as specified by the SQL standard, a
 - https://www.postgresql.org/docs/current/functions-string.html
 - https://www.postgresql.org/docs/current/functions-math.html
 
-=== Notes / TODOs
-
-- I don't love the format yet. This document is currently just for content.
-- I want to separate the special forms because they do not fit with the "signature" column well
-- Switch arguments to meaningful names instead of just *x*, *y*, etc.
-- Have a better format/mechanism for specifying parameterized types and their domains
-- Type information is quick and dirty for now
-
 == Standard
 
 .Aggregations
