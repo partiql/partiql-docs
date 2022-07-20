@@ -2,7 +2,7 @@
 :table-caption!:
 
 == Preface
-This document contains the standard functions as specified by the SQL standard. For spec conformance, a PartiQL implementation must contain all of these. This document contains an extended function section which includes additional functions which are not in the SQL spec, but are common amongst SQL implementations.
+This document contains the builtin functions as specified by the SQL standard, as well as a section on extended builtins which are not in the SQL spec, but are common amongst SQL implementations.
 
 === References
 

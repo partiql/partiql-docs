@@ -1,6 +1,8 @@
 = PartiQL Builtins Support
 :table-caption!:
 
+Reference xref:builtins-sql.adoc[SQL Builtins]
+
 .Aggregations
 [cols="1,1,3,3",frame=none]
 |===
