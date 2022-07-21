@@ -222,9 +222,8 @@ In the following statement, we insert two values to `Music` table, `Music` table
 
 ```SQL
 INSERT INTO Music
-VALUES <<{'Artist' : 'Acme Band', 'SongTitle' : 'PartiQL Rocks'},
-    {'Artist' : 'Emca Band', 'TitleSong' : 'PartiQL Rocks'};
->>
+    <<{'Artist' : 'Acme Band', 'SongTitle' : 'PartiQL Rocks'},
+    {'Artist' : 'Emca Band', 'TitleSong' : 'PartiQL Rocks'}>>;
 ```
 
 In the following statement we insert multiple person items as a bag value to `Person` table, `Person` table has an open schema with `LastName` and `DOB` as required attributes:
@@ -454,8 +453,7 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint li
 -- Existing Item with HK as primary key: {HK: 1, RK: 1}
 -- Item after the update:  {HK: 1, RK: 1, myAttr: 1}
 
-INSERT into Customers
-VALUES <<{HK: 1, RK: 1}>>
+INSERT into Customers <<{HK: 1, RK: 1}>>
 ON CONFLICT DO
 UPDATE SET {HK: 1, RK: 1, myAttr: 1}
 ```
@@ -487,8 +485,7 @@ Inserts or updates two items into a NoSQL database. Assumes a unique constraint 
 -- Item after the update: 
 --  {HK: 1, RK: 1, myAttr: 10}
 
-INSERT into Customers
-VALUES <<{HK: 4, RK: 1, someAttr: "Foo"},
+INSERT into Customers <<{HK: 4, RK: 1, someAttr: "Foo"},
     {HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO
@@ -507,8 +504,7 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint li
 -- Item after the update: 
 --  {HK: 1, RK: 1, myAttr: 12, newAttr = 'World'}
 
-INSERT into Customers
-VALUES <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO
 UPDATE SET myAttr = EXCLUDED.myAttr, newAttr = 'World';
@@ -524,8 +520,7 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint li
 -- Item after the execution:
 --   {HK: 1, RK: 1, myAttr: 10}
 
-INSERT into Customers AS CX
-VALUES <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers AS CX <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO
 UPDATE SET myAttr = EXCLUDED.myAttr, newAttr = 'World'
@@ -545,8 +540,7 @@ The following example leads to a `SemanticError` exception because `sort_key` is
 --  {HK: 1, RK: 1, myAttr: 12}
 -- Outcome is a `SemanticError` with the existing item being intact.
 
-INSERT into Customers
-VALUES <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO REPLACE {HK: 1, thirdAttr: "World"};
 ```
@@ -559,8 +553,7 @@ The following example leads to a `SemanticError` exception because partition key
 -- Existing Item is {HK: 1, RK: 1, myAttr: 12}
 -- Outcome is a `SemanticError` with the existing item being intact.
 
-INSERT into Customers
-VALUES <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO REPLACE {RK: 1, thirdAttr: "World"};
 ```
@@ -572,8 +565,7 @@ The following example leads to a `SemanticError` exception because both partitio
 ```SQL
 -- Existing Item is { HK: 1, RK: 1, myAttr: 12 }
 -- Outcome is a SemanticError
-INSERT into Customers
-VALUES <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO REPLACE {thirdAttr: "World"};
 ```
@@ -588,8 +580,7 @@ The following example leads to replacement of the item specified by replace with
 -- Outcome is:
 --  {HK: 1, RK: 1, thirdAttr: "World"}
 
-INSERT into Customers
-VALUES <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO REPLACE {HK: 1, RK: 1, thirdAttr: "World"};
 ```
@@ -606,8 +597,7 @@ The following example SHOULD* lead to replacing the existing item with the item 
 --  {HK: 1, RK: 3, thirdAttr: “World”}, 
 --  {HK: 1, RK: 2, myAttr: 12 }
 
-INSERT into Customers
-VALUES <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
+INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
 ON CONFLICT
     DO REPLACE {HK: 1, RK: 3, thirdAttr: "World"};
 ```
@@ -624,8 +614,7 @@ The following example MUST lead to a `SemanticError` if there is an existing ite
 --  {HK: 1, RK: 2, myAttr: 12 }
 -- Outcome is SemanticError
 
-INSERT into Customers
-VALUES <<{ HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
+INSERT into Customers <<{ HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
 ON CONFLICT
     DO REPLACE {HK: 1, RK: 2, thirdAttr: "World"};
 ```
@@ -636,7 +625,7 @@ To insert multiple rows as bag value using the multi–row `VALUES` syntax:
 
 ```SQL
 INSERT INTO films
-VALUES <<{code: 'B6717', title: 'Tampopo', did: 110},
+    <<{code: 'B6717', title: 'Tampopo', did: 110},
     {code: 'HG120', title: 'The Dinner Game', did: 140}>>;
 ```
 
@@ -654,18 +643,18 @@ Insert or update new distributors values as bag value. Assumes the database engi
 
 ```SQL
 INSERT INTO distributors
-VALUES <<{did: 5, dname: 'Gizmo Transglobal'},
+    <<{did: 5, dname: 'Gizmo Transglobal'},
     {did: 6, dname: 'Associated Computing, Inc'}>>
 ON CONFLICT
     DO
 UPDATE SET dname = EXCLUDED.dname;
 ```
 
-Insert distributors values as bag value. In case of a conflict on unique constraint updates the values as stated in the insert. Assumes the database engine implementation can infer the unique index as . Note that the special `excluded` table is used to reference values originally proposed for insertion:
+Insert distributors values as bag value. In case of a conflict on unique constraint updates the values as stated in the insert. Assumes the database engine implementation can infer the unique index on table `distributors`. Note that the special `excluded` table is used to reference values originally proposed for insertion:
 
 ```SQL
 INSERT INTO distributors
-VALUES <<{did: 5, dname: 'Gizmo Transglobal'},
+    <<{did: 5, dname: 'Gizmo Transglobal'},
     {did: 6, dname: 'Associated Computing, Inc'}>>
 ON CONFLICT
     DO
