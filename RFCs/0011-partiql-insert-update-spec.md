@@ -173,7 +173,7 @@ As providing attribute names is optional, when attribute names are omitted and v
 
 It’s worth emphasizing that, the implementing database MUST provide an ordering for the declared attributes that appear in the Schema.
 
-When attribute names are omitted and `VALUES <bag value>` is provided, the values in `<bag value>` MUST include required attribute–value pairs and MAY include optional or undeclared attribute-value pairs.
+When attribute names are omitted and `<bag value>` is provided, the values in `<bag value>` MUST include required attribute–value pairs and MAY include optional or undeclared attribute-value pairs.
 
 When attribute names are provided, they can be listed in any order. Each required attribute that is omitted in the provided attributes, MUST be filled with a default value, either its declared default value or an implementation of null. If the expression for any attribute is not of the correct data type, automatic type conversion i.e. type coercion MAY be attempted.
 
@@ -256,17 +256,17 @@ Optional attributes in target schema that have the same name in the resulting tu
 The following example statement inserts items from `Vehicles` table into `HeavyVehicles` table. Both tables have the same layout for required and optional attributes, therefore the `INSERT` statement can insert items using a `SELECT` query.
 
 ```SQL
--- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be
--- defined.CREATE TABLE Music
--- (
---    Artist     VARCHAR(20) NOT NULL,
---    SongTitle  VARCHAR(30) NOT NULL,
---    AlbumTitle VARCHAR(25) NOT NULL,
---    Year       INT,
---    Price      FLOAT,
---    Genre      VARCHAR(10),
---    PRIMARY KEY (Artist, SongTitle)
--- );
+-- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Music
+(
+   Artist     VARCHAR(20) NOT NULL,
+   SongTitle  VARCHAR(30) NOT NULL,
+   AlbumTitle VARCHAR(25) NOT NULL,
+   Year       INT,
+   Price      FLOAT,
+   Genre      VARCHAR(10),
+   PRIMARY KEY (Artist, SongTitle)
+);
 
 CREATE TABLE RockAlbums
 (
@@ -296,16 +296,17 @@ WHERE RockGenre IN ('Alternative', 'SpaceRock');
 The following example statement attempts to insert items from `Vehicles` table to `HeavyVehicles` table. Both tables have the same layout for required attributes but have different types for `Year` optional attribute, therefore—if the implementing database system does not implement a type coercion rule from `DATE` to `INT`—the `INSERT` statement using a `SELECT` query leads to a `SemanticError`.
 
 ```SQL
--- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be-- defined.CREATE TABLE Music
--- (
---    Artist     VARCHAR(20) NOT NULL,
---    SongTitle  VARCHAR(30) NOT NULL,
---    AlbumTitle VARCHAR(25) NOT NULL,
---    Year       INT,
---    Price      FLOAT,
---    Genre      VARCHAR(10),
---    PRIMARY KEY (Artist, SongTitle)
--- );
+-- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be defined.
+CREATE TABLE Music
+(
+   Artist     VARCHAR(20) NOT NULL,
+   SongTitle  VARCHAR(30) NOT NULL,
+   AlbumTitle VARCHAR(25) NOT NULL,
+   Year       INT,
+   Price      FLOAT,
+   Genre      VARCHAR(10),
+   PRIMARY KEY (Artist, SongTitle)
+);
 
 CREATE TABLE RockAlbums
 (
@@ -361,8 +362,7 @@ This section covers parameters that may be used when only inserting new PartiQL 
 `DEFAULT` denotes the corresponding attribute gets filled with its default value. For a generated attribute (E.g. auto-increments), specifying this is permitted which SHOULD result in computing the attribute value from its data-generation expression. Examples for `DEFAULT`:
 
 ```SQL
--- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be
--- defined.
+-- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be defined.
 CREATE TABLE Foo
 (
     foo_key  serial PRIMARY KEY,
