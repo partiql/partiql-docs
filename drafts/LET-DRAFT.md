@@ -30,7 +30,7 @@ In this doc, I first try to define the `LET` Statement based on the existing spe
 In this document, I tried to stay coherent with the terminology defined in our [spec](https://partiql.org/assets/PartiQL-Specification.pdf).
 
 1. Binding tuple: `bi = ⟨ x1 : v1, ..... xn : vn⟩` where each `xi` is a **bind name** to the PartiQL value `vi`
-2. The bag of binding tuples: `<<b1,......bk>>` denoted `Bin/outClause`
+2. The bag of binding tuples: `<<b1,......bk>>` denoted B<sup>in/out</sup><sub>Clause</sub>
 3. `⍴0,⍴ ⊢ q -> v` denotes that the PartiQL query `q` evaluates to the value `v` when evaluated within the database environment `⍴0` and variable environment, i.e. when every variable of `q` is instantiated by its binding in `⍴` and each database name is instantiated to its value in `⍴0`.
 4. Variables environment: denoted by `⍴` created by the defined query variables.
 
@@ -71,7 +71,7 @@ where not x like ...
 
 Informally:
 
-`LET` should be operating a one-on-one mapping on the input bindings. i.e., for each **binding tuple** `bi` in `BoutFrom`, `LET` should extends `bi` with a new binding.
+`LET` should be operating a one-on-one mapping on the input bindings. i.e., for each **binding tuple** `bi` in B<sup>out</sup>, `LET` should extends `bi` with a new binding.
 
 Proposed Grammar:
 *`let_clause → expr_query AS variable (, expr_query AS variable)?`*
@@ -88,7 +88,7 @@ Note that in this option, I tried to obey the current spec as much as I can with
 
 Syntax: `LET e as x`, where `e` is an **expression** and `x` is an **element variable**.
 
-The `LET` clause inputs a bag of binding tuples `Bin` and output a bag of binding tuples `Bout`. For each input binding tuple `b` in `BinLet`, the LET clause outputs `b || ⟨ x : v ⟩`, where `⍴0,⍴||b ⊢ e -> v`
+The `LET` clause inputs a bag of binding tuples B<sup>in</sup> and output a bag of binding tuples B<sup>out</sup>. For each input binding tuple `b` in B<sup>in</sup><sub>Let</sub>, the LET clause outputs `b || ⟨ x : v ⟩`, where `⍴0,⍴||b ⊢ e -> v`
 * * *
 
 1. **Support for multiple LET source.**
@@ -108,7 +108,7 @@ Assume `(1)` outputs **a bag of binding tuples** `Bi`, then `LET e1, ...., ei+1`
 We can generalize the first two rules as the following pseudo-code:
 
 ```
-Prev <- BinLet
+Prev <- Bin_Let
 Cur <- <<>>  // an empty bag 
 for each binding tuple b in Prev:
     let_binding = ⟨⟩
@@ -149,12 +149,12 @@ FROM mydb.customers as c LET mydb.orders as o
 Should output:
 
 ```
-BoutFrom = BinLet =
+Bout_From = BinLet =
           << 
             ⟨c: {'id' : 5, 'name' : 'Joe'} ⟩
             ⟨c: {'id' : 7, 'name' : 'Mary'} ⟩
           >>
-BoutLet = << 
+Bout_Let = << 
             ⟨c: {'id' : 5, 'name' : 'Joe'}, 
              o: <<
                    {'custId' : 7, 'productId' : 101},
@@ -188,7 +188,7 @@ Notice that `aj` can be the same as `xk`
 This definition slightly modifies option 1 in that it uses the newly defined operator `+` to add **bind names** without modifying the existing **bind names** in case of shadowing.
 
 ```
-Prev <- BinLet
+Prev <- Bin_Let
 Cur <- <<>>  // an empty bag
 for each binding tuple b in Prev:
     for each e in LET SOURCE:
@@ -221,7 +221,7 @@ x = 3
 This definition uses the concatenate operator `||` when dealing with `LET` source, and uses the newly defined `+` operator to add **bind names** to the current **variable environment**.
 
 ```
-Prev <- BinLet
+Prev <- Bin_Let
 Cur <- <<>>  // an empty bag
 for each binding tuple b in Prev:
     let_binding = ⟨⟩
@@ -275,18 +275,6 @@ SELECT ...
 LET ...
 ```
 
->For the sake of discussion, let us segment the clauses into two kinds:
-
->Let the input of the clauses to be `P`, let the output of the clause to be `Q`.
-
->Then we have:
-
->Type 1: For every `q ∈ Q, q ∈ P` i.e., for every element that is in the output of Q. Here we talk about `WHERE`, `HAVING`, `LIMIT`, `OFFSET`, etc.
-
->Type 2: There exists at least one  `q ∈ Q`, such that `q ∉ Q`. Here we talk about `FROM`, `GROUP BY`, `ORDER BY`, etc.
-
->Consider we have a query whose execution order of  `..., Ci, ..., Cj,...`. where `Ci` and `Cj` are of type 2, and all `Ck` for `i< k < j` is of type 1.  Suppose we would put a `LET` after each `Ck`, then it is functionally equivalent to put all the variable defined in the `LET` after `Ci+1`, based on the above definition of `LET`.
-
 Consider the following to example:
 
 ```
@@ -314,7 +302,7 @@ From log as l GROUP BY l.sensor AS sensor GROUP AS g LET 1 as x
 Suppose that:
 
 ```
-BoutGROUP = BinLet 
+Bout_GROUPBY = Bin_Let 
          = **<<**
             ⟨sensor:1, 
              g: << ⟨l:{’sensor’:1, ’co’:0.4}⟩,⟨l:{’sensor’:1, ’co’:0.2}>>
@@ -329,7 +317,7 @@ BoutGROUP = BinLet
 Then:
 
 ```
-BoutLet = <<
+Bout_Let = <<
             ⟨sensor:1, 
              g: << ⟨l:{’sensor’:1, ’co’:0.4}⟩,⟨l:{’sensor’:1, ’co’:0.2}>>,
              x:1
@@ -395,13 +383,13 @@ Treating `LET` differently here offers ground for different shadowing behavior.
 
 ```
 FROM << { 'a' : 1} >> as x LET 2 as x
-BoutLet = << ⟨x : 2⟩ >>
+Bout_Let = << ⟨x : 2⟩ >>
 ```
 
 * Under option 3, `LET` will just add an additional binding with the same name.
 
 ```
-BoutLet = << ⟨x : {'a':1}, x: 2⟩ >>
+Bout_Let = << ⟨x : {'a':1}, x: 2⟩ >>
 ```
 
 * Excluding `SELECT`, I could not find a case where the above definition can cause problem, the issue with `SELECT` will be further demonstrated below.
@@ -418,7 +406,7 @@ FROM log AS l LET 1 AS x GROUP BY l.sensor AS sensor GROUP AS g LET 2 AS y
 ```
 
 ```
-BoutLet = <<
+Bout_Let = <<
             ⟨sensor:1, 
              g: << ⟨l:{’sensor’:1, ’co’:0.4, ’x’:1}⟩,
                    ⟨l:{’sensor’:1, ’co’:0.2, ’x’:1}    <-- First LET
@@ -436,7 +424,7 @@ Question 1: Different lexical Scope
 
 * Notice that the two variables (`x`,`y`) defined respectively by the two `LET` statements have different lexical scope, which could causing confusion to the user.
 * I personally don’t find this to be a huge problem, it could be just me overthinking, but this problem may be solved by having a different keyword, i.e. `LETTING` to follow the `GROUP BY` clause.
-* If we only allow “LET”, after `FROM` and `GROUP BY`, it might worth to consider using different keywords.
+* If we only allow “LET”, after `FROM` and `GROUP BY`, it might be worth to consider using different keywords.
 * Again may be worth to say that “LET”/“LETTING” after `GROUP BY` is a keyword instead of a clause in this case.
 
 
@@ -444,7 +432,7 @@ Question 2: Shadowing:
 Without the complication of `LET`, if we have `GROUP BY ... AS x GROUP AS x`, which we currently permit, then:
 
 ```
-BoutGroupBy= <<
+Bout_GroupBy= <<
             ⟨x: ..., <----- GROUP BY
              x: ..., <----- GROUP; In case of SELECT, this will be outputed.
             ⟩,
@@ -578,7 +566,7 @@ In my opinion, `SELECT *` should output the variables defined by `LET`, and choi
 
 1. PartiQL spec: https://partiql.org/assets/PartiQL-Specification.pdf
 2. Github RFC on LET: https://github.com/partiql/partiql-spec/issues/15
-3. Paraphrasing Almann’s analogy to have a initial overview of `LET` (FROM-LET): (Hopefully I get those right...)
+3. Paraphrasing Almann’s analogy to have a initial overview of `LET` (FROM-LET):
     1. `LET` is similar to `CROSS JOIN` with one critical difference, `LET` will never increase the cardinality of the result, whereas `CROSS JOIN` may increase the cardinality.
     2. `LET` should be treated exactly as `CROSS JOIN` against a singleton. i.e `(a1, b1, c1)x(a2, b2, c2) vs. (a1, b1, c1)x((a2, b2, c2))`
     3. `LET` is a one-to-one mapping,  it takes the environment as an input and amends that environment, whereas `CROSS JOIN` is a flatten map, it takes the environment as an input, amends that environment, and flattens the result.
