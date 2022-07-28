@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Although we have implemented the `LET` clause in `Partiql-lang-kotlin`, we have not yet define the semantics for `LET` in our spec. The purpose of this document is to keep notes on relative information we have on `LET` clause so far, and hopefully can lay some ground work for future RFC and spec work.
+Although we have implemented the `LET` clause in `Partiql-lang-kotlin`, we have not yet defined the semantics for `LET` in our spec. The purpose of this document is to keep notes on relative information we have on `LET` clause so far, and hopefully can lay some ground work for future RFC and spec work.
 I used the word “proposed” for lack of a better alternative, please view it as content for discussion.
 * * *
 
@@ -38,11 +38,11 @@ In this document, I tried to stay coherent with the terminology defined in our [
 
 ## Definition of `LET`
 
-For now, consider the scope is limit to `FROM-LET`, i.e., `LET` clause followed by `FROM`.
+For now, consider the scope is limit to `FROM-LET`, i.e., `FROM` clause followed by `LET` .
 
 ### **Use case of LET:**
 
-LET should be used as a way to reduce redundancy and complexity of the query. It is sometimes usefully to store the result of a (sub) expression / (sub) query to use in the subsequent clause. `LET` should allow such “variables storage”, by creating new variable bindings based on the collection of bindings fed in through it as part of the `SELECT`-`FROM`-`WHERE`.
+LET should be used as a way to reduce redundancy and complexity of the query. It is sometimes useful to store the result of a (sub) expression / (sub) query to use in a subsequent clause. `LET` should allow such “variables storage”, by creating new variable bindings based on the collection of bindings fed in through it as part of the `SELECT`-`FROM`-`WHERE`.
 
 Example:
 
@@ -58,12 +58,11 @@ and lower("payload") like '%failure%' escape '\' and lower("payload") like '%err
 
 With let, we can rewrite the query to something similar to:
 
-```
+```SQL
 SELECT *
 from s3object as s3
 let lower("payload") as x
 where not x like ...
-```
 
 * * *
 
@@ -74,7 +73,8 @@ Informally:
 `LET` should be operating a one-on-one mapping on the input bindings. i.e., for each **binding tuple** `bi` in B<sup>out</sup>, `LET` should extends `bi` with a new binding.
 
 Proposed Grammar:
-*`let_clause → expr_query AS variable (, expr_query AS variable)?`*
+```EBNF
+<let clause> ::= <expr query> AS <identifier> [, <expr query> AS <identifier>] ...`
 
 Syntax:
 `LET e1 as x1, ... , en as xn`
@@ -93,11 +93,11 @@ The `LET` clause inputs a bag of binding tuples B<sup>in</sup> and output a bag 
 
 1. **Support for multiple LET source.**
 
-Syntax: `LET e1 as x1, ... , en as xn`, where `e` is an **expression** and `x` is an **element variable**.
+Syntax: `LET e1 as x1, ... , en as xn`, where `e` is an **expression** and each `xi` is an **element variable**.
 
 The expression `ej` may use variables defined by the `ei`. for `1 ≤ i ≤ j ≤ n`.
 
-i.e,. `LET 1 as a, a + 1 as B` should be legal.
+i.e., `LET 1 as a, a + 1 as B` should be legal.
 
 We can define this behavior inductively:
 
@@ -142,9 +142,8 @@ orders: <<
 
 The following query:
 
-```
+```SQL
 FROM mydb.customers as c LET mydb.orders as o
-```
 
 Should output:
 
@@ -174,7 +173,7 @@ Bout_Let = <<
 
 #### **Alternative options**
 
-Those two options are developed with shadowing in mind.
+Above two variants of options 1 are developed with shadowing in mind.
 
 Since we do not explicitly disallow duplicated **bind names** in the **binding tuples**, i.e., `⟨ x: ..., x: ...⟩` is so far allowed, at least in our implementation ( `GROUP BY ... as x GROUP as x`). Assuming this is indeed the behavior we desired, then:
 
@@ -182,7 +181,7 @@ We could define that an operation on **binding tuple**, say `+`,
 Let a =  `⟨ a1: b1, ... , ai: bi⟩, b = ⟨ x1: y1, ... , xk, yk⟩`
 Then a+b = `⟨ a1: b1, ... , ai: bi, x1: y1, ... , xk, yk⟩`
 Notice that `aj` can be the same as `xk`
-
+`TODO`: explain the expected behavior by reevaluating the queries in the `Background` section with this approach i.e. using `+`.
 #### **Definition - Option 2**
 
 This definition slightly modifies option 1 in that it uses the newly defined operator `+` to add **bind names** without modifying the existing **bind names** in case of shadowing.
@@ -215,7 +214,7 @@ y = 2
 x = 3 
 `
 ```
-
+`TODO`: explain the expected behavior by reevaluating the queries in the `Background` section with this approach i.e. using `+`.
 #### **Definition - Option 3**
 
 This definition uses the concatenate operator `||` when dealing with `LET` source, and uses the newly defined `+` operator to add **bind names** to the current **variable environment**.
@@ -247,7 +246,7 @@ will remain as:
 `y = 2 
 x = 3 `
 ```
-
+`TODO`: explain the expected behavior by reevaluating the queries in the `Background` section with this approach i.e. using `||`.
 
 The implication of each option will be further demonstrated in the next section. To reduce the length, we will mostly compare Option 1 with Option 3.
 * * *
@@ -277,16 +276,14 @@ LET ...
 
 Consider the following to example:
 
-```
+```SQL
 FROM a LET b AS x, c AS y WHERE x > 1
-```
 
-```
+```SQL
 FROM a LET b AS x WHERE x > 1 LET c AS y
-```
 
 Now notice the **the bag of binding tuples** produced by the two queries are exact the same. One could argue that a query optimizer should be able to decide where the `LET` should be executed.
-
+`TODO` expand the output of both examples to be more explicit about the function of `WHERE` predicate in the output.
 With this in mind, the question we should focus on first is, should we support `LET` after `GROUP BY`, `LET` after `ORDER BY` and `LET` after `SELECT`.
 * * *
 
@@ -295,9 +292,8 @@ With this in mind, the question we should focus on first is, should we support `
 Notice that since the proposed `LET` semantics follows the pattern of “**input bag of binding tuples, evaluate constituent expressions, output bag of binding tuples**”, it should have no problem following `GROUP BY` and `ORDER BY`.
 For example:
 
-```
-From log as l GROUP BY l.sensor AS sensor GROUP AS g LET 1 as x
-```
+```SQL
+FROM log AS l GROUP BY l.sensor AS sensor GROUP AS g LET 1 AS x
 
 Suppose that:
 
@@ -330,7 +326,7 @@ Bout_Let = <<
 ```
 
 * * *
-
+`TODO`: expand the application of `LET` in `ORDER BY`.
 #### **SELECT**
 
 Consider `SELECT ... LET ...`, should the `LET` be executed after the SELECT?
@@ -362,7 +358,7 @@ SELECT .....
 ## Impact on extending the support of `LET`
 
 Here I find that different interpretation of `LET` may lead to different expectation to shadowing behavior.
-Here I will used the defined three options to demonstrate different shadowing behaviors under each scenario.
+Here I use the defined three options to demonstrate different shadowing behaviors under each scenario.
 
 ### Case 1:  Supporting `LET` only after `FROM`
 
@@ -371,7 +367,7 @@ In this scenario, `LET` should be functionally the same as `CROSS JOIN` against 
 Treating `LET` differently here offers ground for different shadowing behavior.
 
 1. `LET` as a keyword in `FROM` clause:
-
+`TODO` add an example.
 * Since we do not allow shadowing in the `FROM` clause(not explicitly stated in the spec, but no one really allows it), shadowing should be prohibited in this scenario.
 * `LET` could be defined similar to `JOIN` in regard to our grammar.
 * If we defined it that way, we could not extends the support to other clauses.
@@ -397,13 +393,12 @@ Bout_Let = << ⟨x : {'a':1}, x: 2⟩ >>
 In my opinion, if we decide that we shall not support `LET` in other clauses in the future, then `LET` should be consider as a keyword.
 * * *
 
-### Case 2: Extending Supports to `GROUP BY`
+### Case 2: Extending support to `GROUP BY`
 
 Consider the following query:
 
-```
+```SQL
 FROM log AS l LET 1 AS x GROUP BY l.sensor AS sensor GROUP AS g LET 2 AS y
-```
 
 ```
 Bout_Let = <<
@@ -450,18 +445,18 @@ Option 3 solve this problem by allowing x to be added into the **binding tuples*
 Then how should we define `SELECT` behavior? i.e. what should `SELECT x` outputs?
 * * *
 
-### Case 3: Extending Supports to All Clause other than SELECT
+### Case 3: Extending Supports to all clauses excluding SELECT
 
 I argue this is more for user convenience. If we decide that we potentially can go down this route, then `LET` should be considered as a clause, not a keyword.
 * * *
 
-### Case 4: Extending Supports to All Clause including SELECT
+### Case 4: Extending Supports to all clauses including SELECT
 
 As stated before, defining what `LET` after `SELECT` means is tricky. I purpose that we not implement this for now.
 That said, if we shall revisit this decision, it should be relatively easy to plug the feature in.
 * * *
 
-## **Interacting with SELECT ***
+## Interacting with `SELECT *`
 
 The practical question here is, should SELECT * outputs variable produced by LET.
 
