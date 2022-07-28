@@ -46,13 +46,13 @@ LET should be used as a way to reduce redundancy and complexity of the query. It
 
 Example:
 
-```
-select * from s3object
-where (((((not (lower("payload") like '%gurr%' escape '\'))
-and (not (lower("payload") like '%[stream_shadow=true]%' escape '\'))
-and (((not (lower("payload") like '%gurr%' escape '\'))
-and lower("_sourcecategory") = 'stream' and lower("payload") like '%handling%' escape '\'
-and lower("payload") like '%failure%' escape '\' and lower("payload") like '%error%' escape '\'
+```sql
+SELECT * FROM s3object
+WHERE (((((NOT (lower("payload") LIKE '%gurr%' ESCAPE '\'))
+AND (NOT (lower("payload") LIKE '%[stream_shadow=true]%' ESCAPE '\'))
+AND (((NOT (lower("payload") LIKE '%gurr%' ESCAPE '\'))
+AND lower("_sourcecategory") = 'stream' AND lower("payload") LIKE '%handling%' ESCAPE '\'
+AND lower("payload") LIKE '%failure%' ESCAPE '\' AND lower("payload") LIKE '%error%' ESCAPE '\'
 ......
 ```
 
@@ -204,18 +204,17 @@ return Prev
 Notice that
 
 ```
-`LET 1     AS x 
+LET 1     AS x 
     2     AS y 
-    x + y AS x `
+    x + y AS x
 ```
 
 will result in:
 
 ```
-`x = 1
+x = 1
 y = 2 
 x = 3 
-`
 ```
 `TODO`: explain the expected behavior by reevaluating the queries in the `Background` section with this approach i.e. using `+`.
 #### Definition - Option 3
@@ -238,16 +237,16 @@ return Prev
 This way:  Notice that
 
 ```
-`LET 1     AS x 
+LET 1     AS x 
     2     AS y 
-    x + y AS x `
+    x + y AS x 
 ```
 
 will remain as:
 
 ```
-`y = 2 
-x = 3 `
+y = 2 
+x = 3 
 ```
 `TODO`: explain the expected behavior by reevaluating the queries in the `Background` section with this approach i.e. using `||`.
 
