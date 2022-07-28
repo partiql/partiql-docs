@@ -25,7 +25,7 @@ To deicide the expected behavior, we need to figure out the definition for `LET`
 In this doc, I first try to define the `LET` Statement based on the existing spec, then discussed two alternative approaches that may require small addition to the Spec. Next, I discussed the possibility of extending the support of  `LET` to other clauses and proposed how `SELECT *` could interact with variables defined by `LET`. Finally, I did a cross comparison on results of the above queries based on different design.
 * * *
 
-## **Terminology**
+## Terminology
 
 In this document, I tried to stay coherent with the terminology defined in our [spec](https://partiql.org/assets/PartiQL-Specification.pdf).
 
@@ -40,7 +40,7 @@ In this document, I tried to stay coherent with the terminology defined in our [
 
 For now, consider the scope is limit to `FROM-LET`, i.e., `FROM` clause followed by `LET` .
 
-### **Use case of LET:**
+### Use case of LET:
 
 LET should be used as a way to reduce redundancy and complexity of the query. It is sometimes useful to store the result of a (sub) expression / (sub) query to use in a subsequent clause. `LET` should allow such “variables storage”, by creating new variable bindings based on the collection of bindings fed in through it as part of the `SELECT`-`FROM`-`WHERE`.
 
@@ -60,13 +60,14 @@ With let, we can rewrite the query to something similar to:
 
 ```SQL
 SELECT *
-from s3object as s3
-let lower("payload") as x
-where not x like ...
+FROM s3object AS s3
+LET LOWER("payload") AS x
+WHERE NOT x LIKE ...
+```
 
 * * *
 
-### **Proposed LET definition**
+### Proposed LET definition
 
 Informally:
 
@@ -74,13 +75,14 @@ Informally:
 
 Proposed Grammar:
 ```EBNF
-<let clause> ::= <expr query> AS <identifier> [, <expr query> AS <identifier>] ...`
+<let clause> ::= <expr query> AS <identifier> [, <expr query> AS <identifier>] ...
+```
 
 Syntax:
 `LET e1 as x1, ... , en as xn`
 * * *
 
-#### **Formal Definition - Option 1**
+#### Formal Definition - Option 1
 
 Note that in this option, I tried to obey the current spec as much as I can without introducing additional operator/definition.
 
@@ -122,7 +124,7 @@ return Prev
 
 * * *
 
-#### **FROM LET Example Based On the above Semantics**
+#### FROM LET Example Based On the above Semantics
 
 Consider that we are in a database called `mydb`, such database(schema) have two tables, `customers` and `orders`
 
@@ -144,6 +146,7 @@ The following query:
 
 ```SQL
 FROM mydb.customers as c LET mydb.orders as o
+```
 
 Should output:
 
@@ -171,7 +174,7 @@ Bout_Let = <<
 
 * * *
 
-#### **Alternative options**
+#### Alternative options
 
 Above two variants of options 1 are developed with shadowing in mind.
 
@@ -182,7 +185,7 @@ Let a =  `⟨ a1: b1, ... , ai: bi⟩, b = ⟨ x1: y1, ... , xk, yk⟩`
 Then a+b = `⟨ a1: b1, ... , ai: bi, x1: y1, ... , xk, yk⟩`
 Notice that `aj` can be the same as `xk`
 `TODO`: explain the expected behavior by reevaluating the queries in the `Background` section with this approach i.e. using `+`.
-#### **Definition - Option 2**
+#### Definition - Option 2
 
 This definition slightly modifies option 1 in that it uses the newly defined operator `+` to add **bind names** without modifying the existing **bind names** in case of shadowing.
 
@@ -215,9 +218,9 @@ x = 3
 `
 ```
 `TODO`: explain the expected behavior by reevaluating the queries in the `Background` section with this approach i.e. using `+`.
-#### **Definition - Option 3**
+#### Definition - Option 3
 
-This definition uses the concatenate operator `||` when dealing with `LET` source, and uses the newly defined `+` operator to add **bind names** to the current **variable environment**.
+This definition uses the concatenation operator `||` when dealing with `LET` source, and uses the newly defined `+` operator to add **bind names** to the current **variable environment**.
 
 ```
 Prev <- Bin_Let
@@ -251,7 +254,7 @@ x = 3 `
 The implication of each option will be further demonstrated in the next section. To reduce the length, we will mostly compare Option 1 with Option 3.
 * * *
 
-### **LET as an optional following clause to any other clause**
+### LET as an optional following clause to any other clause
 
 With the proposed `LET` definition, let us explore the possibility of extends the support for `LET` to other clauses.
 
@@ -278,22 +281,25 @@ Consider the following to example:
 
 ```SQL
 FROM a LET b AS x, c AS y WHERE x > 1
+```
 
 ```SQL
 FROM a LET b AS x WHERE x > 1 LET c AS y
+```
 
-Now notice the **the bag of binding tuples** produced by the two queries are exact the same. One could argue that a query optimizer should be able to decide where the `LET` should be executed.
+Now notice **the bag of binding tuples** produced by the two queries are exact the same. One could argue that a query optimizer should be able to decide where the `LET` should be executed.
 `TODO` expand the output of both examples to be more explicit about the function of `WHERE` predicate in the output.
 With this in mind, the question we should focus on first is, should we support `LET` after `GROUP BY`, `LET` after `ORDER BY` and `LET` after `SELECT`.
 * * *
 
-#### **GROUP BY/ ORDER BY**
+#### GROUP BY/ ORDER BY
 
 Notice that since the proposed `LET` semantics follows the pattern of “**input bag of binding tuples, evaluate constituent expressions, output bag of binding tuples**”, it should have no problem following `GROUP BY` and `ORDER BY`.
 For example:
 
 ```SQL
 FROM log AS l GROUP BY l.sensor AS sensor GROUP AS g LET 1 AS x
+```
 
 Suppose that:
 
@@ -324,10 +330,10 @@ Bout_Let = <<
             ⟩ 
            >> 
 ```
-
-* * *
 `TODO`: expand the application of `LET` in `ORDER BY`.
-#### **SELECT**
+* * *
+
+#### SELECT
 
 Consider `SELECT ... LET ...`, should the `LET` be executed after the SELECT?
 If so, there is no clause can reference the variable defined in the `LET` clause that follows `SELECT` in a single SFW query.
@@ -370,9 +376,9 @@ Treating `LET` differently here offers ground for different shadowing behavior.
 `TODO` add an example.
 * Since we do not allow shadowing in the `FROM` clause(not explicitly stated in the spec, but no one really allows it), shadowing should be prohibited in this scenario.
 * `LET` could be defined similar to `JOIN` in regard to our grammar.
-* If we defined it that way, we could not extends the support to other clauses.
+* If we defined it that way, we could not extend the support to other clauses.
 
-1. `LET` as a clause:
+2. `LET` as a clause:
 
 * The advantage to do so is that we can extend the support to different clause in the future.
 * Under option 1, we allow shadowing by saying that variables defined in `LET` will overwrite the variables defined in the `FROM`
@@ -390,7 +396,7 @@ Bout_Let = << ⟨x : {'a':1}, x: 2⟩ >>
 
 * Excluding `SELECT`, I could not find a case where the above definition can cause problem, the issue with `SELECT` will be further demonstrated below.
 
-In my opinion, if we decide that we shall not support `LET` in other clauses in the future, then `LET` should be consider as a keyword.
+In my opinion, if we decide that we shall not support `LET` in other clauses in the future, then `LET` should be considered as a keyword.
 * * *
 
 ### Case 2: Extending support to `GROUP BY`
@@ -399,6 +405,7 @@ Consider the following query:
 
 ```SQL
 FROM log AS l LET 1 AS x GROUP BY l.sensor AS sensor GROUP AS g LET 2 AS y
+```
 
 ```
 Bout_Let = <<
@@ -463,7 +470,7 @@ The practical question here is, should SELECT * outputs variable produced by LET
 The following forms the basis of the analysis:
 
 >According to the spec section 3.3:
-the `SELECT` clause is responsible for converting from binding tuples to collections of arbitrary PartiQL elements. The `SELECT` **** inputs a bag (or array, if `ORDER BY` is present) of binding tuples, and outputs the SFW query’s result, which is a bag (resp. array) with exactly one element for each input binding tuple. I
+the `SELECT` clause is responsible for converting from binding tuples to collections of arbitrary PartiQL elements. The `SELECT` inputs a bag (or array, if `ORDER BY` is present) of binding tuples, and outputs the SFW query’s result, which is a bag (resp. array) with exactly one element for each input binding tuple.
 
 
 Unfortunately, the Spec was not too particular about unqualified asterisk. The gap should be filled with a mechanism to convert unqualified asterisk to qualified asterisk.   
@@ -491,7 +498,7 @@ It seems like `SELECT *` should output the variable defined by `LET`.
 That said, if we decide otherwise, the implementation should not be a problem.
 * * *
 
-## **Cross comparison**
+## Cross comparison
 
 |Query	|
 |---	|
