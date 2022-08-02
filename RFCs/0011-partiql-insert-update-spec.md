@@ -226,8 +226,10 @@ In the following statement, we insert two values to `Music` table, `Music` table
 
 ```SQL
 INSERT INTO Music
-    <<{'Artist' : 'Acme Band', 'SongTitle' : 'PartiQL Rocks'},
-    {'Artist' : 'Emca Band', 'TitleSong' : 'PartiQL Rocks'}>>;
+<<
+{'Artist' : 'Acme Band', 'SongTitle' : 'PartiQL Rocks'},
+{'Artist' : 'Emca Band', 'TitleSong' : 'PartiQL Rocks'}
+>>;
 ```
 
 In the following statement we insert multiple person items as a bag value to `Person` table, `Person` table has an open schema with `LastName` and `DOB` as required attributes:
@@ -280,7 +282,7 @@ SELECT * FROM Foo;
 >>;
 ```
 
-In the following statements lead to a `SemanticError`:
+The following statements lead to a `SemanticError`:
 
 ```SQL
 CREATE TABLE Foo
@@ -300,7 +302,7 @@ INSERT INTO Foo (id, name)
 { id: 4, name: "some-other-name", value: "10" }
 >>;
 
--- `SemanticError` because `<bag value>` doesn't provide ordering.
+-- `SemanticError` because `<bag value>` doesn't provide ordering, hence values cannot get mapped to the provided attribute names.
 INSERT INTO Foo (id, name)
 << 2, "somename" >>;
 ```
@@ -378,10 +380,12 @@ CREATE TABLE RockAlbums
     PRIMARY KEY (Artist, SongTitle)
 );
 
-INSERT INTO MusicSELECT * FROM RockAlbums;
+INSERT INTO Music
+SELECT * FROM RockAlbums;
 ```
 
 The following example statement, inserts some rows into table `films` from a table `tmp_films`. Both tables must have the same layout for required and optional attributes that are in common.
+For the attributes that are not in common, if the target table `films` has an open schema, the statement succeeds, otherwise, it's a `SemanticError`.
 
 ```SQL
 INSERT INTO films
