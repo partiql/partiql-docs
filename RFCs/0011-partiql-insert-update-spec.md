@@ -162,25 +162,29 @@ Implementation based on this specification MUST lead to atomic insertions of Par
 
 As providing attribute names is optional, when attribute names are omitted and values are provided by `VALUES` clause or a `<sub-select>`:
 
-
 * (a) If the number of values in a data item is equal to the number of declared attributes, the values are assumed to refer to the declared attributes, in order of their definition in the table schema, and
 
 * (b) If the number of values in data item (M) is fewer than the number of declared attributes (N) the values are assumed to refer to the first M declared attributes, in order, and
 
 * (c) If the number of values in a data item (M) is greater than the number of declared attributes (N) it is an error, and
-* (d) If a value is not specified for every required attribute, it is an error.
 
+* (d) If a value is not specified for every required attribute, it is an error.
 
 It’s worth emphasizing that, the implementing database MUST provide an ordering for the declared attributes that appear in the Schema.
 
-When attribute names are omitted and `<bag value>` is provided, the values in `<bag value>` MUST include required attribute–value pairs and MAY include optional or undeclared attribute-value pairs.
+When attribute names are omitted and `<bag value>` is provided, all elements of `<bag value>` MUST be `<tuple value>`. In this case, 
+each `<tuple value>` within the `<bag value>` represents an attribute-value pair with attribute corresponding to the Schema.
+If a `<tuple value>` for an attribute-value pair is not specified in the bag, default value for the corresponding attribute 
+will be used. In addition, the values for all not null attributes SHALL be specified if a default value is not specified in the Schema.
 
-When attribute names are provided, they can be listed in any order. Each required attribute that is omitted in the provided attributes, MUST be filled with a default value, either its declared default value or an implementation of null. If the expression for any attribute is not of the correct data type, automatic type conversion i.e. type coercion MAY be attempted.
+When attribute names are provided with `<bag value>`, it's a `SematicError`; this is because `<bag value>` is unordered.
+
+When attribute names are provided with `VALUES`, they can be listed in any order. Each required attribute that is omitted in the provided attributes, 
+MUST be filled with a default value, either its declared default value or an implementation of null. If the expression for any attribute is not of the correct data type, automatic type conversion i.e. type coercion MAY be attempted.
 
 #### 3.1 Examples
 
 In the following examples, `films` table has a closed schema.
-Insert a single row:
 
 ```SQL
 INSERT INTO films
@@ -229,20 +233,76 @@ INSERT INTO Music
 In the following statement we insert multiple person items as a bag value to `Person` table, `Person` table has an open schema with `LastName` and `DOB` as required attributes:
 
 ```SQL
-INSERT INTO Person <<{'FirstName' : 'Raul',
-    'LastName' : 'Lewis',
-    'DOB' : 1963-08-19T,
-    'GovId' : 'LEWISR261LL',
-    'GovIdType' : 'Driver License',
-    },{'LastName' : 'Logan',
-    'DOB' : 1967-07-03T,
-    'Address' : '43 Stockert Hollow Road, Everett, WA, 98203'
-    },{'LastName' : 'Pena',
-    'DOB' : 1974-02-10T,
-    'GovId' : '744 849 301',
-    'GovIdType' : 'SSN',
-    'Address' : '4058 Melrose Street, Spokane Valley, WA, 99206'
-    }>>;
+INSERT INTO Person
+<<
+{'FirstName' : 'Raul',
+'LastName' : 'Lewis',
+'DOB' : 1963-08-19T,
+'GovId' : 'LEWISR261LL',
+'GovIdType' : 'Driver License',
+},{'LastName' : 'Logan',
+'DOB' : 1967-07-03T,
+'Address' : '43 Stockert Hollow Road, Everett, WA, 98203'
+},{'LastName' : 'Pena',
+'DOB' : 1974-02-10T,
+'GovId' : '744 849 301',
+'GovIdType' : 'SSN',
+'Address' : '4058 Melrose Street, Spokane Valley, WA, 99206'
+}
+>>;
+```
+
+In the following statement we insert multiple items as a bag value to `Foo` table, `Foo` table has an open schema:
+
+```SQL
+CREATE TABLE Foo
+(
+   id         int     not null primary key,
+   is_deleted boolean not null default false,
+   name       varchar(50),
+   bar        varchar(10)      default "baz",
+);
+
+INSERT INTO Foo
+<<
+{ id: 1 },
+{ id: 2, name: "somename" },
+{ id: 3, is_deleted: true, bar: "10"},
+{ id: 4, name: "some-other-name", value: "10"}
+>>;
+
+SELECT * FROM Foo;
+<<
+{ id: 1, is_deleted: false, name: NULL, bar: "baz" },
+{ id: 2, is_deleted: false, name: "somename", bar: "baz" },
+{ id: 3, is_deleted: true, name: NULL, bar: "10" },
+{ id: 4, is_deleted: false, name: "some-other-name", bar: "baz", value: "10"},
+>>;
+```
+
+In the following statements lead to a `SemanticError`:
+
+```SQL
+CREATE TABLE Foo
+(
+   id         int     not null primary key,
+   is_deleted boolean not null default false,
+   name       varchar(50),
+   bar        varchar(10)      default "baz",
+);
+
+-- `SemanticError` because the bahavior for adding or not adding attributes like `is_deleted` is undefined.
+INSERT INTO Foo (id, name)
+<<
+{ id: 1 },
+{ id: 2, name: "somename" },
+{ id: 3, is_deleted: true, bar: "10"},
+{ id: 4, name: "some-other-name", value: "10" }
+>>;
+
+-- `SemanticError` because `<bag value>` doesn't provide ordering.
+INSERT INTO Foo (id, name)
+<< 2, "somename" >>;
 ```
 
 ### 3.2 Query
@@ -453,7 +513,9 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint li
 -- Existing Item with HK as primary key: {HK: 1, RK: 1}
 -- Item after the update:  {HK: 1, RK: 1, myAttr: 1}
 
-INSERT into Customers <<{HK: 1, RK: 1}>>
+INSERT into Customers <<
+{HK: 1, RK: 1}
+>>
 ON CONFLICT DO
 UPDATE SET {HK: 1, RK: 1, myAttr: 1}
 ```
@@ -469,8 +531,9 @@ Inserts or updates an item into NoSQL database. Assumes a unique constraint like
 --  {HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}
 
 INSERT into Customers
-VALUES
-    <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+<<
+{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}
+>>
 ON CONFLICT DO
 UPDATE EXCLUDED
 ```
@@ -485,8 +548,11 @@ Inserts or updates two items into a NoSQL database. Assumes a unique constraint 
 -- Item after the update: 
 --  {HK: 1, RK: 1, myAttr: 10}
 
-INSERT into Customers <<{HK: 4, RK: 1, someAttr: "Foo"},
-    {HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers
+<<
+{HK: 4, RK: 1, someAttr: "Foo"},
+{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}
+>>
 ON CONFLICT
     DO
 UPDATE SET myAttr = EXCLUDED.someAttr, newAttr = 'World';
@@ -504,7 +570,8 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint li
 -- Item after the update: 
 --  {HK: 1, RK: 1, myAttr: 12, newAttr = 'World'}
 
-INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers
+<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO
 UPDATE SET myAttr = EXCLUDED.myAttr, newAttr = 'World';
@@ -520,7 +587,8 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint li
 -- Item after the execution:
 --   {HK: 1, RK: 1, myAttr: 10}
 
-INSERT into Customers AS CX <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers AS CX 
+<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO
 UPDATE SET myAttr = EXCLUDED.myAttr, newAttr = 'World'
@@ -540,7 +608,8 @@ The following example leads to a `SemanticError` exception because `sort_key` is
 --  {HK: 1, RK: 1, myAttr: 12}
 -- Outcome is a `SemanticError` with the existing item being intact.
 
-INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers
+<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO REPLACE {HK: 1, thirdAttr: "World"};
 ```
@@ -553,7 +622,8 @@ The following example leads to a `SemanticError` exception because partition key
 -- Existing Item is {HK: 1, RK: 1, myAttr: 12}
 -- Outcome is a `SemanticError` with the existing item being intact.
 
-INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers
+<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO REPLACE {RK: 1, thirdAttr: "World"};
 ```
@@ -565,7 +635,8 @@ The following example leads to a `SemanticError` exception because both partitio
 ```SQL
 -- Existing Item is { HK: 1, RK: 1, myAttr: 12 }
 -- Outcome is a SemanticError
-INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers
+<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO REPLACE {thirdAttr: "World"};
 ```
@@ -580,7 +651,8 @@ The following example leads to replacement of the item specified by replace with
 -- Outcome is:
 --  {HK: 1, RK: 1, thirdAttr: "World"}
 
-INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+INSERT into Customers
+<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO REPLACE {HK: 1, RK: 1, thirdAttr: "World"};
 ```
@@ -597,7 +669,8 @@ The following example SHOULD* lead to replacing the existing item with the item 
 --  {HK: 1, RK: 3, thirdAttr: “World”}, 
 --  {HK: 1, RK: 2, myAttr: 12 }
 
-INSERT into Customers <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
+INSERT into Customers
+<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
 ON CONFLICT
     DO REPLACE {HK: 1, RK: 3, thirdAttr: "World"};
 ```
@@ -614,7 +687,8 @@ The following example MUST lead to a `SemanticError` if there is an existing ite
 --  {HK: 1, RK: 2, myAttr: 12 }
 -- Outcome is SemanticError
 
-INSERT into Customers <<{ HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
+INSERT into Customers
+<<{ HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
 ON CONFLICT
     DO REPLACE {HK: 1, RK: 2, thirdAttr: "World"};
 ```
@@ -625,8 +699,10 @@ To insert multiple rows as bag value using the multi–row `VALUES` syntax:
 
 ```SQL
 INSERT INTO films
-    <<{code: 'B6717', title: 'Tampopo', did: 110},
-    {code: 'HG120', title: 'The Dinner Game', did: 140}>>;
+<<
+{code: 'B6717', title: 'Tampopo', did: 110},
+{code: 'HG120', title: 'The Dinner Game', did: 140}
+>>;
 ```
 
 Insert or update new distributors as appropriate. Assumes a unique index has been defined that constrains values appearing in the `did` attribute. Note that the special `excluded` table is used to reference values originally proposed for insertion:
@@ -643,8 +719,10 @@ Insert or update new distributors values as bag value. Assumes the database engi
 
 ```SQL
 INSERT INTO distributors
-    <<{did: 5, dname: 'Gizmo Transglobal'},
-    {did: 6, dname: 'Associated Computing, Inc'}>>
+<<
+{did: 5, dname: 'Gizmo Transglobal'},
+{did: 6, dname: 'Associated Computing, Inc'}
+>>
 ON CONFLICT
     DO
 UPDATE SET dname = EXCLUDED.dname;
@@ -654,8 +732,10 @@ Insert distributors values as bag value. In case of a conflict on unique constra
 
 ```SQL
 INSERT INTO distributors
-    <<{did: 5, dname: 'Gizmo Transglobal'},
-    {did: 6, dname: 'Associated Computing, Inc'}>>
+<<
+{did: 5, dname: 'Gizmo Transglobal'},
+{did: 6, dname: 'Associated Computing, Inc'}
+>>
 ON CONFLICT
     DO
 UPDATE SET EXCLUDED;
