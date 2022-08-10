@@ -2,8 +2,6 @@
 - PartiQL Issue [partiql/partiql-docs/#4](https://github.com/partiql/partiql-docs/issues/4)
 - RFC PR: [partiql/partiql-docs/#11](https://github.com/partiql/partiql-docs/pull/11)
 
-# PartiQL Upsert and Replace Pre-PR
-
 # Summary
 
 This RFC specifies PartiQL's syntax and semantics for insert-or-update—also known as UPSERT—and insert-or-replace as part of PartiQL data manipulation language (DML). UPSERT is an informal term for a statement that denotes inserting or updating a set of data to a target database’s table based on existing availability condition of that data in the same table.
@@ -35,8 +33,6 @@ The keywords “MUST”, “MUST NOT”, “REQUIRED”, “SHALL”, “SHALL N
 * **Required attributes**: A set, comprising the declared attributes that must exist for a data item to conform to a Schema.
 * **Schema**: Schema is an abstract entity that is used as a blueprint to describe data along with its associated constraints.
 * **Tuple**: The rows of relations which are collection of column values. In a non-relational data model (E.g. NoSQL/semi-structured model) denotes a collection of name/value pairs also known as an Item; tuples can be ordered or unordered depending on the database system.
-
-*Note: Some examples and parts of the text are based on [PostgresSQL INSERT documentation.](https://www.postgresql.org/docs/current/sql-insert.html)*
 
 ### Out of scope
 
@@ -84,7 +80,8 @@ Note:
       }
    [ WHERE <condition> ]
 
-<do replace> ::= SET {
+<do replace> ::= EXCLUDED
+        | SET {
         <attr values> [, <attr values>]...
             | <tuple value>
       }
@@ -159,7 +156,7 @@ Implementation based on this specification MUST lead to atomic insertions of Par
 
 ### 3. 1 Attribute names
 
-As providing attribute names is optional, when attribute names are omitted and values are provided by `VALUES`, a `<sub-select>`, or bag of lists (E.g. << ['v1', 'v2'], ['v3', 'v4'] >>):
+As providing attribute names is optional, when attribute names are omitted and values are provided by `VALUES`, a `<sub-select>`, or bag of lists (E.g. `<< ['v1', 'v2'], ['v3', 'v4'] >>`):
 
 * (a) If the number of values in a data item is equal to the number of declared attributes, the values are assumed to refer to the declared attributes, in order of their definition in the table schema, and
 
@@ -395,7 +392,7 @@ WHERE RockGenre IN ('Alternative', 'SpaceRock');
 ```
 
 The following statement shows that the values can be specified with a sub-select. The INSERT goes through because
-the values that are not in the target table are nullable, hence being replaced by `NULL`.
+the values that are not `SELECT` default to `NULL`.
 
 ```SQL
 INSERT INTO Music (Artist, SongTitle)
@@ -484,6 +481,7 @@ CREATE TABLE Foo SCHEMA OPEN
 );
 
 -- `SemanticError` because of the presence of target attribute names with bag of tuples.
+-- In this case, the behavior for adding or not adding attributes like `is_deleted` is undefined.
 INSERT INTO Foo (id, title)
 <<
 { id: 1 },
@@ -491,14 +489,7 @@ INSERT INTO Foo (id, title)
 { id: 3, is_deleted: true, title: NULL, bar: "10" }
 >>;
 
--- `SemanticError` because the behavior for adding or not adding attributes like `is_deleted` is undefined.
-INSERT INTO Foo (id, title)
-<<
-{ id: 1 },
-{ id: 3, is_deleted: true, bar: "10"}
->>;
-
--- `SemanticError` because not all <bag value> items can get mapped to the target attributes.
+-- `SemanticError` because not all <bag value> items (row values) can get mapped to the target attributes set.
 INSERT INTO Foo (id, title)
 <<
 [2, "some-name"],
@@ -506,7 +497,7 @@ INSERT INTO Foo (id, title)
 "some-other-name"
 >>;
 
--- `SemanticError` because INSERT has more target attributes than `<bag value>` than values specified by some of the `<bag value>` elements (E.g. `[1]`).
+-- `SemanticError` because INSERT has more target attributes than row values specified by some of the `<bag value>` elements (E.g. `[1]`).
 INSERT INTO Foo (id, title)
 <<
 [1],
@@ -539,7 +530,7 @@ This section covers parameters that may be used when only inserting new PartiQL 
 
 `<attr name>` is the name of an attribute in the table named by `<table name>`. When referencing an attribute with `ON CONFLICT`, the table name MUST get omitted from the specification of a target attribute. For example, `INSERT INTO table_name ... ON CONFLICT DO UPDATE SET table_name.attr = 1` is invalid; this is because, as `ON CONFLICT` operates on `<table name>` only, having the option of using the table name alongside of table alias (if defined) is superfluous and can lead to potentially more user errors while making the statements less readable.
 
-`DEFAULT VALUES` denotes that all required attributes MUST be filled with their default values, as if `DEFAULT` were explicitly specified for each attribute. If the target database system has no concept or implementation of default values, this should return a `SemanticError` exception.
+`DEFAULT VALUES` denotes that all required attributes MUST be filled with their default values or `NULL` in case of attributes being nullable. This is as if `DEFAULT` were explicitly specified for each attribute. If the target database system has no concept or implementation of default values, this should return a `SemanticError` exception.
 
 `<value expr>` is a value expression (E.g. `1` or `2+2`) that can get assigned to the corresponding attribute.
 
@@ -612,7 +603,7 @@ UPDATE SET myAttr = 1;
 
 ##### Example 4.2.3
 
-Inserts or updates an item into NoSQL database. Assumes a unique constraint like primary key has been violated for an existing item. In this case `DO UPDATE SET` updates the item with the value specified in `INSERT`.
+Inserts or updates an item into NoSQL database. Assumes a unique constraint like primary key has been violated for an existing item. In this case `DO UPDATE SET` merges the existing item with the value specified in `INSERT`.
 
 ```SQL
 -- Existing Item with HK as primary key:
@@ -912,6 +903,11 @@ UPDATE EXCLUDED;
     1. https://www.db-fiddle.com/f/gWBLQ4NXhhxu7KTg9M6JwB/7
 9. PostgresSQL multi-column update discussion:
     1. https://www.postgresql.org/message-id/87muw0tfml.fsf%40news-spur.riddles.org.uk
+10. PostgresSQL `INSERT INTO` with default values:
+    1. https://www.db-fiddle.com/f/kHZSgG9F5EjWPpu99ezLRo/2
+    2. https://www.db-fiddle.com/f/rDRSMrUQKJ6D6vEgte6Q58/2
+    3. https://www.db-fiddle.com/f/ePbzN3JT2GSgZbvKDULjBe/1
+    4. https://www.db-fiddle.com/f/ePbzN3JT2GSgZbvKDULjBe/0 (an erroneous query)
 
 # Drawbacks
 
