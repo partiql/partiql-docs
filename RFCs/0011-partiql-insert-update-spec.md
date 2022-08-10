@@ -40,10 +40,10 @@ The keywords “MUST”, “MUST NOT”, “REQUIRED”, “SHALL”, “SHALL N
 
 ### Out of scope
 
-* Returning output from INSERT statement—the specification of returning output is considered as an extention to this RFC which is planned to be defined in the future.
+* Returning output from INSERT statement—the specification of returning output is considered as an extension to this RFC which is planned to be defined in the future.
 * Constraints and unique index syntax and semantics—this is considered as a DDL feature as part of `CREATE INDEX` which requires definition in a separate RFC.
 * Conflict detection based on index expression and index predicate—index expression and index predicate grammar and semantics are considered as a DDL feature as part of `CREATE INDEX` which require definition in a separate RFC.
-* Type coercion implementations—the type coercion when inserting data from a source schema to a target schema with a sub-select statement is considered as a database system implementation concern.
+* Type coercion implementations—the type coercion when inserting data from a source schema to a target schema with an expression (E.g. a sub-select statement) is considered as a database system implementation concern.
 * Security privileges for execution of DML statements—the data access and manipulation security specification is considered as a database system specific feature, hence is considered out of scope for this RFC.
 
 ## 2. Proposed grammar and semantics
@@ -81,7 +81,6 @@ Note:
 <do update> ::= EXCLUDED
         | SET {
           <attr values> [, <attr values>]...
-        | <tuple value>
       }
    [ WHERE <condition> ]
 
@@ -156,11 +155,11 @@ https://partiql.org/assets/PartiQL-Specification.pdf *)
 
 ## 3. Description
 
-Implementation based on this specification MUST lead to atomic insertions of PartiQL values into a Schema (E.g. a database table). Atomic insertions means that either all of the insertions specified by the INSERT statement are performed, or none of the insertions are performed—E.g. when there is an error in insertion of one or more data items.
+Implementation based on this specification MUST lead to atomic insertions of PartiQL values into a Schema (E.g. a database table). Atomic insertion means that either all or none of the insertions specified by the `INSERT` statement are performed—E.g. when there is an error in insertion of one or more data items.
 
 ### 3. 1 Attribute names
 
-As providing attribute names is optional, when attribute names are omitted and values are provided by `VALUES` clause or a `<sub-select>`:
+As providing attribute names is optional, when attribute names are omitted and values are provided by `VALUES`, a `<sub-select>`, or bag of lists (E.g. << ['v1', 'v2'], ['v3', 'v4'] >>):
 
 * (a) If the number of values in a data item is equal to the number of declared attributes, the values are assumed to refer to the declared attributes, in order of their definition in the table schema, and
 
@@ -172,69 +171,126 @@ As providing attribute names is optional, when attribute names are omitted and v
 
 It’s worth emphasizing that, the implementing database MUST provide an ordering for the declared attributes that appear in the Schema.
 
-When attribute names are omitted and `<bag value>` is provided, all elements of `<bag value>` MUST be `<tuple value>`. In this case, 
-each `<tuple value>` within the `<bag value>` represents an attribute-value pair with attribute corresponding to the Schema.
-If a `<tuple value>` for an attribute-value pair is not specified in the bag, default value for the corresponding attribute 
-will be used. In addition, the values for all not null attributes SHALL be specified if a default value is not specified in the Schema.
+When attribute names are omitted and bag of tuples is provided, each `<tuple value>` within the `<bag value>` represents an attribute-value pair with attribute corresponding to the Schema.
+If a `<tuple value>` for an attribute-value pair is not specified in the bag, default value or null value (in case of attribute being nullable) for the corresponding attribute will be used. 
+The values for all not null attributes SHALL be specified if a default value is not specified in the Schema.
 
-When attribute names are provided with `<bag value>`, it's a `SematicError`; this is because `<bag value>` is unordered.
+When attribute names are provided with bag of tuples, it's a `SematicError`.
 
-When attribute names are provided with `VALUES`, they can be listed in any order. Each required attribute that is omitted in the provided attributes, 
-MUST be filled with a default value, either its declared default value or an implementation of null. If the expression for any attribute is not of the correct data type, automatic type conversion i.e. type coercion MAY be attempted.
+When attribute names are provided with `VALUES` or bag of lists, they can be listed in any order. Each attribute—required or optional—that is omitted in the provided attributes, 
+MUST be filled with a default value, either its declared default value or an implementation of `NULL` in case of the attribute is nullable. If the expression for any attribute is not of the correct data type, automatic type conversion i.e. type coercion MAY be attempted.
 
-#### 3.1 Examples
+Section 3.3 provides more clarification with examples.
 
-In the following examples, `films` table has a closed schema.
+### 3.2 Query
+
+`SELECT` query expression can be used for inserting the resulting values from the query to the target table. The resulting tuples (E.g. rows) MUST have the same attribute name and type as the target schema’s required attributes.
+
+Optional attributes in target schema that have the same name in the resulting tuples from the source schema, SHOULD have the same type. If the implementing database provides type coercion rule for the types involved in source and destination, the `SELECT` MAY lead to a successful outcome, otherwise it's a `SemanticError`. See examples for more clarification.
+
+#### 3.3 Examples
+
+In the following examples, `Films` table has a closed schema. In the table `len` attribute is implicitly defined as nullable.
 
 ```SQL
-INSERT INTO films
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Films SCHEMA CLOSED
+(
+   code  VARCHAR(40) PRIMARY KEY DEFAULT '1',
+   title VARCHAR(100) DEFAULT 'Default Film',
+   did   INTEGER DEFAULT 10,
+   date_prod DATE DEFAULT NOW()::TIMESTAMP,
+   kind VARCHAR(50) DEFAULT 'Comedy',
+   len VARCHAR(50)
+);
+```
+
+```SQL
+INSERT INTO Films
 VALUES ('UA502', 'Bananas', 105, '1971-07-13', 'Comedy', '82 minutes');
 ```
 
-In this example, the `len` required attribute is omitted in the explicit list, and therefore it will have the default value:
+In this example, the `len` attribute is omitted in the target attributes, and therefore it will set to `NULL`— this is because based on the DDL for `Films` `len` is nullable.
 
 ```SQL
-INSERT INTO films (code, title, did, date_prod, kind)
+INSERT INTO Films (code, title, did, date_prod, kind)
 VALUES ('T_601', 'Yojimbo', 106, '1961-06-16', 'Drama');
 ```
 
-The following examples use the `DEFAULT` clause for the date attributes rather than specifying a value:
+The following examples use the `DEFAULT` clause for the `date` and `len` attributes rather than specifying a value:
 
 ```SQL
-INSERT INTO films
-VALUES ('UA502', 'Bananas', 105, DEFAULT, 'Comedy', '82 minutes');
+INSERT INTO Films
+VALUES ('UA503', 'Bananas', 105, DEFAULT, 'Comedy', DEFAULT);
 
-INSERT INTO films (code, title, did, date_prod, kind)
-VALUES ('T_601', 'Yojimbo', 106, DEFAULT, 'Drama');
+INSERT INTO Films (code, title, did, date_prod, kind)
+VALUES ('T_603', 'Yojimbo', 106, DEFAULT, 'Drama');
+
+SELECT * FROM Films;
+<<
+{
+   'code': 'UA503',
+   'title': 'Bananas',
+   'did': 105,
+   'date_prod': 2022-08-10T,
+   'kind': 'Comedy',
+   'len': NULL
+},
+{
+   'code': 'T_603',
+   'title': 'Yojimbo',
+   'did': 106,
+   'date_prod': 2022-08-10T,
+   'kind': 'Drama',
+   'len': NULL
+}
+>>
 ```
 
-The following examples statement inserts a row or item consisting entirely of default values for required attributes:
+The following example statement inserts a row or item consisting entirely of default values:
 
 ```SQL
-INSERT INTO films DEFAULT VALUES;
+INSERT INTO Films DEFAULT VALUES;
 ```
 
 The following example statement inserts multiple rows using the multi-row VALUES syntax:
 
 ```SQL
-INSERT INTO films (code, title, did, date_prod, kind)
+INSERT INTO Films (code, title, did, date_prod, kind)
 VALUES ('B6717', 'Tampopo', 110, '1985-02-10', 'Comedy'),
        ('HG120', 'The Dinner Game', 140, DEFAULT, 'Comedy');
 ```
 
-In the following statement, we insert two values to `Music` table, `Music` table has an open schema with `Artist` and `SongTitle` as required attributes:
+In the following statement, we insert values to `Music` table, `Music` table has a closed schema with `Artist` and `SongTitle` as required attributes:
 
 ```SQL
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Music SCHEMA CLOSED
+(
+   Artist     VARCHAR(20) NOT NULL,
+   SongTitle  VARCHAR(30) NOT NULL,
+   PRIMARY KEY (Artist, SongTitle)
+);
+
 INSERT INTO Music
 <<
 {'Artist' : 'Acme Band', 'SongTitle' : 'PartiQL Rocks'},
-{'Artist' : 'Emca Band', 'TitleSong' : 'PartiQL Rocks'}
+{'Artist' : 'Emca Band', 'SongTitle' : 'PartiQL Rocks'}
 >>;
 ```
 
-In the following statement we insert multiple person items as a bag value to `Person` table, `Person` table has an open schema with `LastName` and `DOB` as required attributes:
+In the following statement we insert multiple person items as a bag value to `Person` table, `Person` table has an open schema with `LastName` and `DOB` as required attributes and `FirtName` as optional attribute.
 
 ```SQL
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Person SCHEMA OPEN
+(
+   LastName    VARCHAR(50) NOT NULL,
+   FirstName   VARCHAR(20),    
+   DOB        DATE NOT NULL,
+   PRIMARY KEY (LastName)
+);
+
 INSERT INTO Person
 <<
 {'FirstName' : 'Raul',
@@ -252,74 +308,64 @@ INSERT INTO Person
 'Address' : '4058 Melrose Street, Spokane Valley, WA, 99206'
 }
 >>;
+
+SELECT * FROM Person;
+<<
+{'LastName' : 'Lewis',
+'FirstName' : 'Raul',
+'DOB' : 1963-08-19T,
+'GovId' : 'LEWISR261LL',
+'GovIdType' : 'Driver License',
+},{'LastName' : 'Logan',
+'FirstName' : NULL,
+'DOB' : 1967-07-03T,
+'Address' : '43 Stockert Hollow Road, Everett, WA, 98203'
+},{'LastName' : 'Pena',
+'FirstName' : NULL,
+'DOB' : 1974-02-10T,
+'GovId' : '744 849 301',
+'GovIdType' : 'SSN',
+'Address' : '4058 Melrose Street, Spokane Valley, WA, 99206'
+}
+>>;
 ```
 
-In the following statement we insert multiple items as a bag value to `Foo` table, `Foo` table has an open schema:
+In the following statement, we insert multiple items as a bag value to `Foo` table, `Foo` table has an open schema:
 
 ```SQL
-CREATE TABLE Foo
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Foo SCHEMA OPEN
 (
-   id         int     not null primary key,
-   is_deleted boolean not null default false,
-   name       varchar(50),
-   bar        varchar(10)      default "baz",
+   id         INT     NOT NULL PRIMARY KEY,
+   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+   title      VARCHAR(50),
+   bar        VARCHAR(10)      DEFAULT "BAZ",
 );
 
+-- In the following, inserting `{ id: 1 }` goes through because the rest of the attributes either have default value or
+-- are nullable.
 INSERT INTO Foo
 <<
 { id: 1 },
-{ id: 2, name: "somename" },
+{ id: 2, title: "some-name" },
 { id: 3, is_deleted: true, bar: "10"},
-{ id: 4, name: "some-other-name", value: "10"}
+{ id: 4, title: "some-other-name", value: "10"}
 >>;
 
 SELECT * FROM Foo;
 <<
-{ id: 1, is_deleted: false, name: NULL, bar: "baz" },
-{ id: 2, is_deleted: false, name: "somename", bar: "baz" },
-{ id: 3, is_deleted: true, name: NULL, bar: "10" },
-{ id: 4, is_deleted: false, name: "some-other-name", bar: "baz", value: "10"},
+{ id: 1, is_deleted: false, title: NULL, bar: "baz" },
+{ id: 2, is_deleted: false, title: "some-name", bar: "baz" },
+{ id: 3, is_deleted: true, title: NULL, bar: "10" },
+{ id: 4, is_deleted: false, title: "some-other-name", bar: "baz", value: "10"},
 >>;
 ```
 
-The following statements lead to a `SemanticError`:
-
-```SQL
-CREATE TABLE Foo
-(
-   id         int     not null primary key,
-   is_deleted boolean not null default false,
-   name       varchar(50),
-   bar        varchar(10)      default "baz",
-);
-
--- `SemanticError` because the bahavior for adding or not adding attributes like `is_deleted` is undefined.
-INSERT INTO Foo (id, name)
-<<
-{ id: 1 },
-{ id: 2, name: "somename" },
-{ id: 3, is_deleted: true, bar: "10"},
-{ id: 4, name: "some-other-name", value: "10" }
->>;
-
--- `SemanticError` because `<bag value>` doesn't provide ordering, hence values cannot get mapped to the provided attribute names.
-INSERT INTO Foo (id, name)
-<< 2, "somename" >>;
-```
-
-### 3.2 Query
-
-`SELECT` query expression can be used for inserting the resulting values from the query to the target table. The resulting tuples (E.g. rows) MUST have the same attribute name and type as the target schema’s required attributes.
-
-Optional attributes in target schema that have the same name in the resulting tuples from the source schema, SHOULD have the same type. If the implementing database provides type coercion rule for the types involved in source and destination, the `SELECT` MAY lead to a successful outcome, otherwise it's a `SemanticError`. See examples for more clarification.
-
-#### 3.4 Examples
-
-The following example statement inserts items from `Vehicles` table into `HeavyVehicles` table. Both tables have the same layout for required and optional attributes, therefore the `INSERT` statement can insert items using a `SELECT` query.
+The following example statement inserts items from `RockAlbums` table into `Music` table. Both tables have the same layout for required and optional attributes and `Music` table has open schema, therefore the `INSERT` statement can insert items using a `SELECT *` query.
 
 ```SQL
 -- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Music
+CREATE TABLE Music SCHEMA OPEN
 (
    Artist     VARCHAR(20) NOT NULL,
    SongTitle  VARCHAR(30) NOT NULL,
@@ -330,7 +376,8 @@ CREATE TABLE Music
    PRIMARY KEY (Artist, SongTitle)
 );
 
-CREATE TABLE RockAlbums
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE RockAlbums SCHEMA CLOSED
 (
     Artist     VARCHAR(20) NOT NULL,
     SongTitle  VARCHAR(30) NOT NULL,
@@ -340,26 +387,28 @@ CREATE TABLE RockAlbums
     PRIMARY KEY (Artist, SongTitle)
 );
 
+-- The following query goes through because `Price` attribute is nullable.
 INSERT INTO Music
 SELECT *
 FROM RockAlbums
 WHERE RockGenre IN ('Alternative', 'SpaceRock');
 ```
 
-The following statement shows that the values can be specified with a sub-select.
+The following statement shows that the values can be specified with a sub-select. The INSERT goes through because
+the values that are not in the target table are nullable, hence being replaced by `NULL`.
 
 ```SQL
 INSERT INTO Music (Artist, SongTitle)
-SELECT Artist, SongTitle
+SELECT Artist, SongTitle, AlbumTitle
 FROM RockAlbums
 WHERE RockGenre IN ('Alternative', 'SpaceRock');
 ```
 
-The following example statement attempts to insert items from `Vehicles` table to `HeavyVehicles` table. Both tables have the same layout for required attributes but have different types for `Year` optional attribute, therefore—if the implementing database system does not implement a type coercion rule from `DATE` to `INT`—the `INSERT` statement using a `SELECT` query leads to a `SemanticError`.
+The following example statement attempts to insert items from `RockAlbums` table to `Music` table. Both tables have the same layout for required attributes but have different types for `Year` optional attribute, therefore—if the implementing database system does not implement a type coercion rule from `DATE` to `INT`—the `INSERT` statement using a `SELECT` query leads to a `SemanticError`.
 
 ```SQL
--- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be defined.
-CREATE TABLE Music
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Music SCHEMA OPEN
 (
    Artist     VARCHAR(20) NOT NULL,
    SongTitle  VARCHAR(30) NOT NULL,
@@ -370,7 +419,8 @@ CREATE TABLE Music
    PRIMARY KEY (Artist, SongTitle)
 );
 
-CREATE TABLE RockAlbums
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE RockAlbums SCHEMA CLOSED
 (
     Artist     VARCHAR(20) NOT NULL,
     SongTitle  VARCHAR(30) NOT NULL,
@@ -384,14 +434,84 @@ INSERT INTO Music
 SELECT * FROM RockAlbums;
 ```
 
-The following example statement, inserts some rows into table `films` from a table `tmp_films`. Both tables must have the same layout for required and optional attributes that are in common.
-For the attributes that are not in common, if the target table `films` has an open schema, the statement succeeds, otherwise, it's a `SemanticError`.
+The following example statement, inserts some rows into table `Films`:
 
 ```SQL
-INSERT INTO films
-SELECT *
-FROM tmp_films
-WHERE date_prod < '2004-05-07';
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Foo SCHEMA CLOSED
+(
+   id         INT     NOT NULL PRIMARY KEY,
+   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+   title      VARCHAR(50),
+   bar        VARCHAR(10) DEFAULT "baz"
+);
+
+INSERT INTO Foo (id, title)
+<<
+[1, DEFAULT],
+[2, "some-name"],
+>>;
+
+SELECT * FROM Foo;
+<<
+{ id: 1, is_deleted: false, title: NULL, bar: "baz" },
+{ id: 2, is_deleted: false, title: "some-name", bar: "baz" }
+>>;
+
+INSERT INTO Foo
+<<
+[3, DEFAULT],
+[4, true],
+>>;
+
+SELECT * FROM Foo;
+<<
+{ id: 3, is_deleted: false, title: NULL, bar: "baz" },
+{ id: 4, is_deleted: true, title: NULL, bar: "baz" }
+>>;
+```
+
+The following statements lead to a `SemanticError`:
+
+```SQL
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Foo SCHEMA OPEN
+(
+   id         int     NOT NULL PRIMARY KEY,
+   is_deleted boolean NOT NULL DEFAULT FALSE,
+   title      varchar(50),
+   bar        varchar(10) DEFAULT "baz"
+);
+
+-- `SemanticError` because of the presence of target attribute names with bag of tuples.
+INSERT INTO Foo (id, title)
+<<
+{ id: 1 },
+{ id: 2, title: "some-name" },
+{ id: 3, is_deleted: true, title: NULL, bar: "10" }
+>>;
+
+-- `SemanticError` because the behavior for adding or not adding attributes like `is_deleted` is undefined.
+INSERT INTO Foo (id, title)
+<<
+{ id: 1 },
+{ id: 3, is_deleted: true, bar: "10"}
+>>;
+
+-- `SemanticError` because not all <bag value> items can get mapped to the target attributes.
+INSERT INTO Foo (id, title)
+<<
+[2, "some-name"],
+1,
+"some-other-name"
+>>;
+
+-- `SemanticError` because INSERT has more target attributes than `<bag value>` than values specified by some of the `<bag value>` elements (E.g. `[1]`).
+INSERT INTO Foo (id, title)
+<<
+[1],
+[1, "some_name"]
+>>;
 ```
 
 ### ON CONFLICT
@@ -424,40 +544,6 @@ This section covers parameters that may be used when only inserting new PartiQL 
 `<value expr>` is a value expression (E.g. `1` or `2+2`) that can get assigned to the corresponding attribute.
 
 `DEFAULT` denotes the corresponding attribute gets filled with its default value. For a generated attribute (E.g. auto-increments), specifying this is permitted which SHOULD result in computing the attribute value from its data-generation expression. Examples for `DEFAULT`:
-
-```SQL
--- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be defined.
-CREATE TABLE Foo
-(
-    foo_key  serial PRIMARY KEY,
-    bar      VARCHAR(40) NOT NULL,
-    baz_date DATE        NOT NULL DEFAULT CURRENT_DATE
-);
-
-INSERT INTO FOO
-VALUES (DEFAULT, 'foo for today');
-
-INSERT INTO FOO(bar)
-VALUES ('bar for today');
-
-SELECT *
-FROM Foo;
--- Result
--- foo_key  bar                   bar_date
--- 1        foo for today         2022-05-04T00:00:00.000Z
--- 2        bar for today         2022-05-04T00:00:00.000Z
-```
-
-`<sub-select>` A SELECT-FROM-WHERE query that supplies the rows or items to be inserted.
-
-This example inserts some rows into table `films` from a table `tmp_films` with the same required attribute layout as `files` and no common optional attributes between `films` and `tmp_films` tables.
-
-```SQL
-INSERT INTO films
-SELECT *
-FROM tmp_films
-WHERE date_prod < '2004-05-07';
-```
 
 ### 4.2 ON CONFLICT Clause
 
@@ -495,14 +581,14 @@ Finally, `INSERT` with an `ON CONFLICT DO UPDATE` or `ON CONFLICT DO REPLACE` cl
 Inserts or updates new distributors in a relational database. Assumes a unique index has been defined that constrains values appearing in the `did` column. Note that the special `EXCLUDED` table is used to reference values originally proposed for insertion.
 
 ```SQL
-INSERT INTO distributors
+INSERT INTO Distributors
 VALUES (5, 'Gizmo Transglobal'),
        (6, 'Associated Computing, Inc') ON CONFLICT (did) DO
 UPDATE SET dname = EXCLUDED.dname;
 ```
 
 ```SQL
-INSERT INTO distributors AS e
+INSERT INTO Distributors AS e
 VALUES
     (5, 'Gizmo Transglobal'),
     (6, 'Associated Computing, Inc')
@@ -511,17 +597,17 @@ ON CONFLICT (did) DO UPDATE SET e.dname = e.dname;
 
 ##### Example 4.2.2
 
-Inserts or updates an item into a NoSQL database. Assumes a unique constraint like primary key has been violated for an existing item. In this case `DO UPDATE SET` updates the item with an additional attribute.
+Inserts or updates an item into a NoSQL database. Assumes a unique constraint e.g. a primary key has been violated for an existing item. In this case `DO UPDATE SET` updates the item with an additional attribute.
 
 ```SQL
--- Existing Item with HK as primary key: {HK: 1, RK: 1}
--- Item after the update:  {HK: 1, RK: 1, myAttr: 1}
+-- Existing Item with HK as primary key: {HK: 1, RK: 1, myOtherAttr: 5}
+-- Item after the update:  {HK: 1, RK: 1, myOtherAttr: 5, myAttr: 1}
 
-INSERT into Customers <<
+INSERT INTO Customers <<
 {HK: 1, RK: 1}
 >>
 ON CONFLICT DO
-UPDATE SET {HK: 1, RK: 1, myAttr: 1}
+UPDATE SET myAttr = 1;
 ```
 
 ##### Example 4.2.3
@@ -544,7 +630,9 @@ UPDATE EXCLUDED
 
 ##### Example 4.2.4
 
-Inserts or updates two items into a NoSQL database. Assumes a unique constraint like primary key has been violated for an existing item. In this case the upsert fails as `EXCLUDED` references an attribute which is non-existent for the item that is conflicting.
+Inserts or updates two items into a NoSQL database. Assumes a unique constraint like primary key has been violated for an existing item.
+
+In this case the upsert fails as `EXCLUDED` references an attribute which is non-existent for the item that is conflicting.
 
 ```SQL
 -- Existing Item with HK as primary key: 
@@ -595,7 +683,7 @@ INSERT into Customers AS CX
 <<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
 ON CONFLICT
     DO
-UPDATE SET myAttr = EXCLUDED.myAttr, newAttr = 'World'
+UPDATE SET myAttr = CX.myAttr, newAttr = 'World'
 WHERE CX.myAttr > 10;
 ```
 
@@ -694,35 +782,39 @@ The following example MUST lead to a `SemanticError` if there is an existing ite
 INSERT into Customers
 <<{ HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
 ON CONFLICT
-    DO REPLACE {HK: 1, RK: 2, thirdAttr: "World"};
+    DO REPLACE SET {HK: 1, RK: 2, thirdAttr: "World"};
+```
+
+##### Example 4.2.13
+
+The following example replaces the existing item with item provided by `INSERT` statement:
+
+```SQL
+-- Existing items is:
+--  {HK: 1, RK: 1, myAttr: 12 },
+-- Outcome is:
+--  { HK: 2, RK: 1, myAttr: 12, anotherAttr: "Hello" }
+
+INSERT into Customers
+<<{ HK: 2, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
+ON CONFLICT
+    DO REPLACE EXCLUDED;
 ```
 
 ## 5. Other Examples
-
-To insert multiple rows as bag value using the multi–row `VALUES` syntax:
-
-```SQL
-INSERT INTO films
-<<
-{code: 'B6717', title: 'Tampopo', did: 110},
-{code: 'HG120', title: 'The Dinner Game', did: 140}
->>;
-```
-
 Insert or update new distributors as appropriate. Assumes a unique index has been defined that constrains values appearing in the `did` attribute. Note that the special `excluded` table is used to reference values originally proposed for insertion:
 
 ```SQL
-INSERT INTO distributors (did, dname)
+INSERT INTO Distributors (did, dname)
 VALUES (5, 'Gizmo Transglobal'),
        (6, 'Associated Computing, Inc') ON CONFLICT (did) 
-       DO
-UPDATE SET dname = EXCLUDED.dname;
+       DO UPDATE SET dname = EXCLUDED.dname;
 ```
 
 Insert or update new distributors values as bag value. Assumes the database engine implementation can infer the primary key for `<conflict target>`. Note that the special `EXCLUDED` table is used to reference values originally proposed for insertion:
 
 ```SQL
-INSERT INTO distributors
+INSERT INTO Distributors
 <<
 {did: 5, dname: 'Gizmo Transglobal'},
 {did: 6, dname: 'Associated Computing, Inc'}
@@ -732,7 +824,7 @@ ON CONFLICT
 UPDATE SET dname = EXCLUDED.dname;
 ```
 
-Insert distributors values as bag value. In case of a conflict on unique constraint updates the values as stated in the insert. Assumes the database engine implementation can infer the unique index on table `distributors`. Note that the special `excluded` table is used to reference values originally proposed for insertion:
+Insert distributors values as bag value. In case of a conflict on unique constraint merges the existing item with its corresponding tuple in `INSERT`. Assumes the database engine implementation can infer the unique index on table `distributors`. Note that the special `excluded` table is used to reference values originally proposed for insertion:
 
 ```SQL
 INSERT INTO distributors
@@ -742,7 +834,7 @@ INSERT INTO distributors
 >>
 ON CONFLICT
     DO
-UPDATE SET EXCLUDED;
+UPDATE EXCLUDED;
 ```
 
 ## References
@@ -843,3 +935,5 @@ Discuss prior art, both the good and the bad, in relation to this proposal. A fe
 # Future possibilities
 
 In the future, we may be able to accommodate `DO DELETE` conflict action which specifies the delete operation if a conflict is raised. In addition, we see addition of specification for other syntactic variation of the semantics specified by this RFC using designated syntax for `UPSERT` and `REPLACE` operations separately. This is to provide more ergonomic choices for implementations that require to adopt the corresponding semantics as separate statements.
+
+In addition, we can extend the grammar, as explained in section 3.2 (Query), to any expression returning applicable PartiQL values; this will be more aligned with PartiQL/SQL++ generalization.
