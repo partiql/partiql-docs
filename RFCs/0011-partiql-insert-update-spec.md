@@ -309,11 +309,13 @@ SELECT * FROM Person;
 'DOB' : 1963-08-19T,
 'GovId' : 'LEWISR261LL',
 'GovIdType' : 'Driver License',
-},{'LastName' : 'Logan',
+},
+{'LastName' : 'Logan',
 'FirstName' : NULL,
 'DOB' : 1967-07-03T,
 'Address' : '43 Stockert Hollow Road, Everett, WA, 98203'
-},{'LastName' : 'Pena',
+},
+{'LastName' : 'Pena',
 'FirstName' : NULL,
 'DOB' : 1974-02-10T,
 'GovId' : '744 849 301',
@@ -391,7 +393,7 @@ The following statement shows that the values can be specified with a sub-select
 the values that are not `SELECT` default to `NULL`.
 
 ```SQL
-INSERT INTO Music (Artist, SongTitle)
+INSERT INTO Music (Artist, SongTitle, AlbumTitle)
 SELECT Artist, SongTitle, AlbumTitle
 FROM RockAlbums
 WHERE RockGenre IN ('Alternative', 'SpaceRock');
