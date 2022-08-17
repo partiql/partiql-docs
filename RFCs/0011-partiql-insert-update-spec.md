@@ -75,16 +75,12 @@ Note:
     | DO REPLACE <do replace>
 
 <do update> ::= EXCLUDED
-        | SET {
-          <attr values> [, <attr values>]...
-      }
+    | SET <attr values> [, <attr values>]...
    [ WHERE <condition> ]
 
 <do replace> ::= EXCLUDED
-        | SET {
-        <attr values> [, <attr values>]...
-            | <tuple value>
-      }
+    | SET <attr values> [, <attr values>]...
+    | VALUE <tuple value>
    [ WHERE <condition> ]
 
 <attr values> ::=  {
@@ -339,22 +335,22 @@ CREATE TABLE Foo SCHEMA OPEN
    bar        VARCHAR(10)      DEFAULT "BAZ",
 );
 
--- In the following, inserting `{ id: 1 }` goes through because the rest of the attributes either have default value or
+-- In the following, inserting `{ 'id': 1 }` goes through because the rest of the attributes either have default value or
 -- are nullable.
 INSERT INTO Foo
 <<
-{ id: 1 },
-{ id: 2, title: "some-name" },
-{ id: 3, is_deleted: true, bar: "10"},
-{ id: 4, title: "some-other-name", value: "10"}
+{ 'id': 1 },
+{ 'id': 2, 'title': 'some-name' },
+{ 'id': 3, 'is_deleted': true, 'bar': "10"},
+{ 'id': 4, 'title': "some-other-name", 'value': "10"}
 >>;
 
 SELECT * FROM Foo;
 <<
-{ id: 1, is_deleted: false, title: NULL, bar: "baz" },
-{ id: 2, is_deleted: false, title: "some-name", bar: "baz" },
-{ id: 3, is_deleted: true, title: NULL, bar: "10" },
-{ id: 4, is_deleted: false, title: "some-other-name", bar: "baz", value: "10"},
+{ 'id': 1, 'is_deleted': false, 'title': NULL, 'bar': 'baz' },
+{ 'id': 2, 'is_deleted': false, 'title': 'some-name', 'bar': 'baz' },
+{ 'id': 3, 'is_deleted': true, 'title': NULL, 'bar': "10" },
+{ 'id': 4, 'is_deleted': false, 'title': 'some-other-name', 'bar': 'baz', 'value': '10'},
 >>;
 ```
 
@@ -440,17 +436,17 @@ CREATE TABLE Foo SCHEMA CLOSED
    id         INT     NOT NULL PRIMARY KEY,
    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
    title      VARCHAR(50),
-   bar        VARCHAR(10) DEFAULT "baz"
+   bar        VARCHAR(10) DEFAULT 'baz'
 );
 
 INSERT INTO Foo (id, title)
 <<
-[2, "some-name"],
+[2, 'some-name'],
 >>;
 
 SELECT * FROM Foo;
 <<
-{ id: 2, is_deleted: false, title: "some-name", bar: "baz" }
+{ 'id': 2, 'is_deleted': false, 'title': 'some-name', 'bar': 'baz' }
 >>;
 
 INSERT INTO Foo
@@ -461,8 +457,8 @@ INSERT INTO Foo
 
 SELECT * FROM Foo;
 <<
-{ id: 3, is_deleted: true, title: NULL, bar: "baz" },
-{ id: 4, is_deleted: true, title: NULL, bar: "baz" }
+{ 'id': 3, 'is_deleted': true, 'title': NULL, 'bar': 'baz' },
+{ 'id': 4, 'is_deleted': true, 'title': NULL, 'bar': 'baz' }
 >>;
 ```
 
@@ -475,24 +471,24 @@ CREATE TABLE Foo SCHEMA OPEN
    id         int     NOT NULL PRIMARY KEY,
    is_deleted boolean NOT NULL DEFAULT FALSE,
    title      varchar(50),
-   bar        varchar(10) DEFAULT "baz"
+   bar        varchar(10) DEFAULT 'baz'
 );
 
 -- `SemanticError` because of the presence of target attribute names with bag of tuples.
 -- In this case, the behavior for adding or not adding attributes like `is_deleted` is undefined.
 INSERT INTO Foo (id, title)
 <<
-{ id: 1 },
-{ id: 2, title: "some-name" },
-{ id: 3, is_deleted: true, title: NULL, bar: "10" }
+{ 'id': 1 },
+{ 'id': 2, 'title': 'some-name' },
+{ 'id': 3, 'is_deleted': true, 'title': NULL, 'bar': '10'}
 >>;
 
 -- `SemanticError` because not all <bag value> items (row values) can get mapped to the target attributes set.
 INSERT INTO Foo (id, title)
 <<
-[2, "some-name"],
+[2, 'some-name'],
 1,
-"some-other-name"
+'some-other-name'
 >>;
 
 -- `SemanticError` because INSERT has more target attributes than row values specified by some of the `<bag value>` elements (E.g. `[1]`).
@@ -603,11 +599,11 @@ ON CONFLICT (did) DO UPDATE SET e.dname = e.dname;
 Inserts or updates an item into a NoSQL database. Assumes a unique constraint e.g. a primary key has been violated for an existing item. In this case `DO UPDATE SET` updates the item with an additional attribute.
 
 ```SQL
--- Existing Item with HK as primary key: {HK: 1, RK: 1, myOtherAttr: 5}
--- Item after the update:  {HK: 1, RK: 1, myOtherAttr: 5, myAttr: 1}
+-- Existing Item with HK as primary key: {'HK': 1, 'RK': 1, 'myOtherAttr': 5}
+-- Item after the update:  {'HK': 1, 'RK': 1, 'myOtherAttr': 5, 'myAttr': 1}
 
 INSERT INTO Customers <<
-{HK: 1, RK: 1}
+{'HK': 1, 'RK': 1}
 >>
 ON CONFLICT DO
 UPDATE SET myAttr = 1;
@@ -619,13 +615,13 @@ Inserts or updates an item into NoSQL database. Assumes a unique constraint like
 
 ```SQL
 -- Existing Item with HK as primary key:
---  {HK: 1, RK: 1, myAttr: 10}
+--  {'HK': 1, 'RK': 1, 'myAttr': 10}
 -- Item after the update:
---  {HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}
+--  {'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}
 
 INSERT into Customers
 <<
-{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}
+{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}
 >>
 ON CONFLICT DO
 UPDATE EXCLUDED
@@ -639,14 +635,14 @@ In this case the upsert fails as `EXCLUDED` references an attribute which is non
 
 ```SQL
 -- Existing Item with HK as primary key: 
---  {HK: 1, RK: 1, myAttr: 10}
+--  {'HK': 1, 'RK': 1, 'myAttr': 10}
 -- Item after the update: 
---  {HK: 1, RK: 1, myAttr: 10}
+--  {'HK': 1, 'RK': 1, 'myAttr': 10}
 
 INSERT into Customers
 <<
-{HK: 4, RK: 1, someAttr: "Foo"},
-{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}
+{'HK': 4, 'RK': 1, 'someAttr': 'Foo'},
+{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}
 >>
 ON CONFLICT
     DO
@@ -661,12 +657,12 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint li
 
 ```SQL
 -- Existing Item with HK and RK form a composite primary key:
---  {HK: 1, RK: 1, myAttr: 10}
+--  {'HK': 1, 'RK': 1, 'myAttr': 10}
 -- Item after the update: 
---  {HK: 1, RK: 1, myAttr: 12, newAttr = 'World'}
+--  {'HK': 1, 'RK': 1, 'myAttr': 12, 'newAttr' = 'World'}
 
 INSERT into Customers
-<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+<<{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}>>
 ON CONFLICT
     DO
 UPDATE SET myAttr = EXCLUDED.myAttr, newAttr = 'World';
@@ -678,12 +674,12 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint li
 
 ```SQL
 -- Existing Item with HK as primary key:
---   {HK: 1, RK: 1, myAttr: 10}
+--   {'HK': 1, 'RK': 1, 'myAttr': 10}
 -- Item after the execution:
---   {HK: 1, RK: 1, myAttr: 10}
+--   {'HK': 1, 'RK': 1, 'myAttr': 10}
 
 INSERT into Customers AS CX 
-<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+<<{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}>>
 ON CONFLICT
     DO
 UPDATE SET myAttr = CX.myAttr, newAttr = 'World'
@@ -700,13 +696,13 @@ The following example leads to a `SemanticError` exception because `sort_key` is
 
 ```SQL
 -- Existing Item is: 
---  {HK: 1, RK: 1, myAttr: 12}
+--  {'HK': 1, 'RK': 1, 'myAttr': 12}
 -- Outcome is a `SemanticError` with the existing item being intact.
 
 INSERT into Customers
-<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+<<{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}>>
 ON CONFLICT
-    DO REPLACE {HK: 1, thirdAttr: "World"};
+    DO REPLACE VALUE {'HK': 1, 'thirdAttr': 'world'};
 ```
 
 ##### Example 4.2.8
@@ -714,13 +710,13 @@ ON CONFLICT
 The following example leads to a `SemanticError` exception because partition key is absent from the value specified by replace.
 
 ```SQL
--- Existing Item is {HK: 1, RK: 1, myAttr: 12}
+-- Existing Item is {'HK': 1, 'RK': 1, 'myAttr': 12}
 -- Outcome is a `SemanticError` with the existing item being intact.
 
 INSERT into Customers
-<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+<<{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}>>
 ON CONFLICT
-    DO REPLACE {RK: 1, thirdAttr: "World"};
+    DO REPLACE VALUE {'RK': 1, 'thirdAttr': 'world'};
 ```
 
 ##### Example 4.2.9
@@ -728,12 +724,12 @@ ON CONFLICT
 The following example leads to a `SemanticError` exception because both partition key and sort_key are absent in the update statement:
 
 ```SQL
--- Existing Item is { HK: 1, RK: 1, myAttr: 12 }
+-- Existing Item is { 'HK': 1, 'RK': 1, 'myAttr': 12 }
 -- Outcome is a SemanticError
 INSERT into Customers
-<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+<<{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}>>
 ON CONFLICT
-    DO REPLACE {thirdAttr: "World"};
+    DO REPLACE VALUE {'thirdAttr': 'world'};
 ```
 
 ##### Example 4.2.10
@@ -742,14 +738,14 @@ The following example leads to replacement of the item specified by replace with
 
 ```SQL
 -- Existing Item is:
---  {HK: 1, RK: 1, myAttr: 12 }
+--  {'HK': 1, 'RK': 1, 'myAttr': 12 }
 -- Outcome is:
---  {HK: 1, RK: 1, thirdAttr: "World"}
+--  {'HK': 1, 'RK': 1, 'thirdAttr': 'world'}
 
 INSERT into Customers
-<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello"}>>
+<<{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}>>
 ON CONFLICT
-    DO REPLACE {HK: 1, RK: 1, thirdAttr: "World"};
+    DO REPLACE VALUE {'HK': 1, 'RK': 1, 'thirdAttr': 'world'};
 ```
 
 ##### Example 4.2.11
@@ -758,16 +754,16 @@ The following example SHOULD* lead to replacing the existing item with the item 
 
 ```SQL
 -- Existing items are:
---  {HK: 1, RK: 1, myAttr: 12 }, 
---  {HK: 1, RK: 2, myAttr: 12 }
+--  {'HK': 1, 'RK': 1, 'myAttr': 12 }, 
+--  {'HK': 1, 'RK': 2, 'myAttr': 12 }
 -- Outcome:
---  {HK: 1, RK: 3, thirdAttr: “World”}, 
---  {HK: 1, RK: 2, myAttr: 12 }
+--  {'HK': 1, 'RK': 3, 'thirdAttr': 'World'}, 
+--  {'HK': 1, 'RK': 2, 'myAttr': 12 }
 
 INSERT into Customers
-<<{HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
+<<{'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello' }>>
 ON CONFLICT
-    DO REPLACE {HK: 1, RK: 3, thirdAttr: "World"};
+    DO REPLACE VALUE {'HK': 1, 'RK': 3, 'thirdAttr': 'world'};
 ```
 
 ** SHOULD, because for a distributed database system, implementing this logic may lead to data inconsistency. This is because there is no guarantee that the INSERT procedure that generates the conflict executes on the same database host where the conflict is going to get resolved.
@@ -778,14 +774,14 @@ The following example MUST lead to a `SemanticError` if there is an existing ite
 
 ```SQL
 -- Existing items is:
---  {HK: 1, RK: 1, myAttr: 12 },
---  {HK: 1, RK: 2, myAttr: 12 }
+--  {'HK': 1, 'RK': 1, 'myAttr': 12 },
+--  {'HK': 1, 'RK': 2, 'myAttr': 12 }
 -- Outcome is SemanticError
 
 INSERT into Customers
-<<{ HK: 1, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
+<<{ 'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello' }>>
 ON CONFLICT
-    DO REPLACE SET {HK: 1, RK: 2, thirdAttr: "World"};
+    DO REPLACE VALUE {'HK': 1, 'RK': 2, 'thirdAttr': 'world'};
 ```
 
 ##### Example 4.2.13
@@ -794,12 +790,12 @@ The following example replaces the existing item with item provided by `INSERT` 
 
 ```SQL
 -- Existing items is:
---  {HK: 1, RK: 1, myAttr: 12 },
+--  {'HK': 1, 'RK': 1, 'myAttr': 12 },
 -- Outcome is:
---  { HK: 2, RK: 1, myAttr: 12, anotherAttr: "Hello" }
+--  { 'HK': 2, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello' }
 
 INSERT into Customers
-<<{ HK: 2, RK: 1, myAttr: 12, anotherAttr: "Hello" }>>
+<<{ 'HK': 2, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello' }>>
 ON CONFLICT
     DO REPLACE EXCLUDED;
 ```
@@ -819,8 +815,8 @@ Insert or update new distributors values as bag value. Assumes the database engi
 ```SQL
 INSERT INTO Distributors
 <<
-{did: 5, dname: 'Gizmo Transglobal'},
-{did: 6, dname: 'Associated Computing, Inc'}
+{'id': 5, dname: 'Gizmo Transglobal'},
+{'id': 6, dname: 'Associated Computing, Inc'}
 >>
 ON CONFLICT
     DO
@@ -832,8 +828,8 @@ Insert distributors values as bag value. In case of a conflict on unique constra
 ```SQL
 INSERT INTO distributors
 <<
-{did: 5, dname: 'Gizmo Transglobal'},
-{did: 6, dname: 'Associated Computing, Inc'}
+{'id': 5, dname: 'Gizmo Transglobal'},
+{'id': 6, dname: 'Associated Computing, Inc'}
 >>
 ON CONFLICT
     DO
