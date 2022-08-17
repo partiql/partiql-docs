@@ -445,25 +445,23 @@ CREATE TABLE Foo SCHEMA CLOSED
 
 INSERT INTO Foo (id, title)
 <<
-[1, DEFAULT],
 [2, "some-name"],
 >>;
 
 SELECT * FROM Foo;
 <<
-{ id: 1, is_deleted: false, title: NULL, bar: "baz" },
 { id: 2, is_deleted: false, title: "some-name", bar: "baz" }
 >>;
 
 INSERT INTO Foo
 <<
-[3, DEFAULT],
+[3, true],
 [4, true],
 >>;
 
 SELECT * FROM Foo;
 <<
-{ id: 3, is_deleted: false, title: NULL, bar: "baz" },
+{ id: 3, is_deleted: true, title: NULL, bar: "baz" },
 { id: 4, is_deleted: true, title: NULL, bar: "baz" }
 >>;
 ```
@@ -503,6 +501,20 @@ INSERT INTO Foo (id, title)
 [1],
 [1, "some_name"]
 >>;
+
+-- `SemanticError` because usage of `DEFAULT` outside `VALUES(...)` is unsupported.
+INSERT INTO Foo (id, title)
+<<
+[1, DEFAULT],
+[2, 'some-name']
+>>;
+
+-- `SemanticError` because usage of `DEFAULT` outside `VALUES(...)` is unsupported.
+INSERT INTO Foo
+<<
+{'id': 1, 'is_deleted': DEFAULT},
+{'id': 2, 'is_deleted': true}
+>>;
 ```
 
 ### ON CONFLICT
@@ -534,7 +546,7 @@ This section covers parameters that may be used when only inserting new PartiQL 
 
 `<value expr>` is a value expression (E.g. `1` or `2+2`) that can get assigned to the corresponding attribute.
 
-`DEFAULT` denotes the corresponding attribute gets filled with its default value. For a generated attribute (E.g. auto-increments), specifying this is permitted which SHOULD result in computing the attribute value from its data-generation expression. Examples for `DEFAULT`:
+`DEFAULT` denotes the corresponding attribute gets filled with its default value. For a generated attribute (E.g. auto-increments), specifying this is permitted which SHOULD result in computing the attribute value from its data-generation expression.
 
 ### 4.2 ON CONFLICT Clause
 
