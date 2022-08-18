@@ -170,8 +170,8 @@ The values for all not null attributes SHALL be specified if a default value is 
 
 When attribute names are provided with bag of tuples, it's a `SematicError`.
 
-When attribute names are provided with `VALUES` or bag of lists, they can be listed in any order. Each attribute—required or optional—that is omitted in the provided attributes, 
-MUST be filled with a default value, either its declared default value or an implementation of `NULL` in case of the attribute is nullable. If the expression for any attribute is not of the correct data type, automatic type conversion i.e. type coercion MAY be attempted.
+When attribute names are provided with `VALUES` or bag of lists, they MAY be listed in any order. Each attribute—required or optional—that is omitted in the provided attributes, 
+MAY be filled with a default value, either its declared default value or an implementation of `NULL`—in case attribute is _nullable_. If the expression for any attribute is not of the correct data type, automatic type conversion i.e. type coercion MAY be attempted.
 
 Section 3.3 provides more clarification with examples.
 
@@ -184,6 +184,8 @@ Optional attributes in target schema that have the same name in the resulting tu
 #### 3.3 Examples
 
 In the following examples, `Films` table has a closed schema. In the table `len` attribute is implicitly defined as nullable.
+
+_In the following examples `CREATE TABLE` including `SCHEMA OPEN` and `SCHEMA CLOSED` syntax is arbitrary since the PartiQL DDL is yet to be defined._
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
@@ -203,14 +205,19 @@ INSERT INTO Films
 VALUES ('UA502', 'Bananas', 105, '1971-07-13', 'Comedy', '82 minutes');
 ```
 
-In this example, the `len` attribute is omitted in the target attributes, and therefore it will set to `NULL`— this is because based on the DDL for `Films` `len` is nullable.
+In this example, the `len` attribute is omitted in the target attributes and the implementing database allows using default value or `NULL` for the omitted attributes in the target attributes.
+In addition, implementing database sets the value of `len` to `NULL`— this is because based on the DDL for `Films`, `len` is nullable.
 
 ```SQL
 INSERT INTO Films (code, title, did, date_prod, kind)
 VALUES ('T_601', 'Yojimbo', 106, '1961-06-16', 'Drama');
 ```
 
-The following examples use the `DEFAULT` clause for the `date` and `len` attributes rather than specifying a value:
+The following examples uses the `DEFAULT` clause for the `date` and `len` attributes rather than specifying a value. 
+
+For the second query, the `len` attribute is omitted in the target attributes and the implementing database allows using default value or `NULL` for the omitted attributes. Therefore, implementing database sets the value of `len` to `NULL`— this is because based on the DDL for `Films` `len` is nullable.
+
+For the third query, the `kind` attribute is omitted in the target attributes and the order of attributes has changed. In this case, the implementing database allows using a different order and default value or `NULL` for the omitted attributes. Therefore, implementing database sets the value of `kind` to its default value 'Comedy':
 
 ```SQL
 INSERT INTO Films
@@ -218,6 +225,9 @@ VALUES ('UA503', 'Bananas', 105, DEFAULT, 'Comedy', DEFAULT);
 
 INSERT INTO Films (code, title, did, date_prod, kind)
 VALUES ('T_603', 'Yojimbo', 106, DEFAULT, 'Drama');
+
+INSERT INTO films (title, code, did, date_prod, len)
+VALUES ('MyTitle', 'MyCode', 108, '1961-06-16', '180 minutes');
 
 SELECT * FROM Films;
 <<
@@ -236,6 +246,14 @@ SELECT * FROM Films;
    'date_prod': 2022-08-10T,
    'kind': 'Drama',
    'len': NULL
+},
+{
+   'code': 'MyCode',
+   'title': 'MyTitle',
+   'did': 108,
+   'date_prod': 1961-06-16T,
+   'kind': 'Comedy',
+   'len': '180 minutes'
 }
 >>
 ```
@@ -334,29 +352,29 @@ CREATE TABLE Foo SCHEMA OPEN
    id         INT     NOT NULL PRIMARY KEY,
    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
    title      VARCHAR(50),
-   bar        VARCHAR(10)      DEFAULT "BAZ",
+   bar        VARCHAR(10)      DEFAULT 'baz',
 );
 
 -- In the following, inserting `{ 'id': 1 }` goes through because the rest of the attributes either have default value or
--- are nullable.
+-- are nullable. In addition, because `Foo` has open-schema we can add `value` as a new attribute to the table.
 INSERT INTO Foo
 <<
 { 'id': 1 },
 { 'id': 2, 'title': 'some-name' },
-{ 'id': 3, 'is_deleted': true, 'bar': "10"},
-{ 'id': 4, 'title': "some-other-name", 'value': "10"}
+{ 'id': 3, 'is_deleted': true, 'bar': '10'},
+{ 'id': 4, 'title': 'some-other-name', 'value': '10'}
 >>;
 
 SELECT * FROM Foo;
 <<
 { 'id': 1, 'is_deleted': false, 'title': NULL, 'bar': 'baz' },
 { 'id': 2, 'is_deleted': false, 'title': 'some-name', 'bar': 'baz' },
-{ 'id': 3, 'is_deleted': true, 'title': NULL, 'bar': "10" },
+{ 'id': 3, 'is_deleted': true, 'title': NULL, 'bar': '10' },
 { 'id': 4, 'is_deleted': false, 'title': 'some-other-name', 'bar': 'baz', 'value': '10'},
 >>;
 ```
 
-The following example statement inserts items from `RockAlbums` table into `Music` table. Both tables have the same layout for required and optional attributes and `Music` table has open schema, therefore the `INSERT` statement can insert items using a `SELECT *` query.
+The following example statement inserts items from `RockAlbums` table into `Music` table. Both tables have the same layout for required and optional attributes and `Music` table has open schema, therefore the first `INSERT` statement can insert items using a `SELECT *` query. Furthermore, second `INSERT` leads to a `SemanticError` because `RockAlbums` has closed schema.
 
 ```SQL
 -- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be defined:
@@ -387,6 +405,11 @@ INSERT INTO Music
 SELECT *
 FROM RockAlbums
 WHERE RockGenre IN ('Alternative', 'SpaceRock');
+
+-- The following leads to a `SemanticError` because `RockAlbums` has closed schema.
+INSERT INTO RockAlbums
+SELECT *
+FROM Music;
 ```
 
 The following statement shows that the values can be specified with a sub-select. The INSERT goes through because
@@ -497,7 +520,7 @@ INSERT INTO Foo (id, title)
 INSERT INTO Foo (id, title)
 <<
 [1],
-[1, "some_name"]
+[1, 'some_name']
 >>;
 
 -- `SemanticError` because usage of `DEFAULT` outside `VALUES(...)` is unsupported.
@@ -536,9 +559,9 @@ This section covers parameters that may be used when only inserting new PartiQL 
 
 `<table name>` is the name of an existing table.
 
-`<alias>` is a substitute name for `<table name>`. When an alias is provided, it SHOULD hide the actual name of the table. This is particularly for the instance when `ON CONFLICT` targets a database table named `EXCLUDED`. In such cases since `EXCLUDED` is also the name of the special table representing rows proposed for insertion, using the alias disambiguates the name conflict—see the “Excluded keyword” section for more details.
+`<alias>` is a substitute name for `<table name>`. When an alias is provided, it SHOULD hide the actual name of the table. This is particularly for the instance when `ON CONFLICT` targets a database table named `EXCLUDED`. In such cases since `EXCLUDED` is also the name of the special table representing rows proposed for insertion, using the alias, disambiguates the name conflict—see the “Excluded keyword” section for more details.
 
-`<attr name>` is the name of an attribute in the table named by `<table name>`. When referencing an attribute with `ON CONFLICT`, the table name MUST get omitted from the specification of a target attribute. For example, `INSERT INTO table_name ... ON CONFLICT DO UPDATE SET table_name.attr = 1` is invalid; this is because, as `ON CONFLICT` operates on `<table name>` only, having the option of using the table name alongside of table alias (if defined) is superfluous and can lead to potentially more user errors while making the statements less readable.
+`<attr name>` is the name of an attribute in the table named by `<table name>`. When referencing an attribute with `ON CONFLICT`, the table name or table alias (if defined) MUST get omitted from the left-hand side of the specification of a target attribute. For example, `INSERT INTO table_name ... ON CONFLICT DO UPDATE SET table_name.attr = 1` is invalid.
 
 `DEFAULT VALUES` denotes that all required attributes MUST be filled with their default values or `NULL` in case of attributes being nullable. This is as if `DEFAULT` were explicitly specified for each attribute. If the target database system has no concept or implementation of default values, this should return a `SemanticError` exception.
 
@@ -576,10 +599,20 @@ In addition to the existing rows or items, `ON CONFLICT` and `WHERE` clauses hav
 Finally, `INSERT` with an `ON CONFLICT DO UPDATE` or `ON CONFLICT DO REPLACE` clause MUST be a “deterministic” statement. This means that the command MUST not be allowed to affect any single existing row or item more than once; a `SemanticError` (E.g. cardinality violation error) MUST be raised when this situation arises. Rows resulting from insertion after conflict, should not duplicate each other in terms of attributes constrained by an arbiter index or constraint. See “ON CONFLICT DO REPLACE Examples” section for more clarification.
 
 #### ON CONFLICT DO UPDATE Examples
+_In the following examples `CREATE TABLE` including `SCHEMA OPEN` and `SCHEMA CLOSED` syntax is arbitrary since the PartiQL DDL is yet to be defined._
 
 ##### Example 4.2.1
 
 Inserts or updates new distributors in a relational database. Assumes a unique index has been defined that constrains values appearing in the `did` column. Note that the special `EXCLUDED` table is used to reference values originally proposed for insertion.
+
+```SQL
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Distributors SCHEMA CLOSED
+(
+    did       INT     NOT NULL PRIMARY KEY,
+    dname     VARCHAR(50),
+);
+```
 
 ```SQL
 INSERT INTO Distributors
@@ -593,12 +626,48 @@ INSERT INTO Distributors AS e
 VALUES
     (5, 'Gizmo Transglobal'),
     (6, 'Associated Computing, Inc')
+ON CONFLICT (did) DO UPDATE SET dname = e.dname;
+```
+
+The following example leads to a `SemanticError` because the usage of `<table name>` or `<alias>` is disallowed on the left-hand side of `e.dname = e.dname` expression.
+```SQL
+INSERT INTO Distributors AS e
+VALUES
+    (5, 'Gizmo Transglobal'),
+    (6, 'Associated Computing, Inc')
 ON CONFLICT (did) DO UPDATE SET e.dname = e.dname;
+```
+
+The following example leads to a `SemanticError` because the usage of `<table name>` alongside `<alias>` is disallowed—see "4.1 Insert Parameters" `<alias>` for more details:
+```SQL
+INSERT INTO Distributors AS e
+VALUES
+    (5, 'Gizmo Transglobal'),
+    (6, 'Associated Computing, Inc')
+ON CONFLICT (did) DO UPDATE SET dname = Distributors.dname;
+```
+
+The following succeeds because `<table name>` is used on the right-hand side of `ON CONFLICT` target and `<alias>` is not specified for the table:
+```SQL
+INSERT INTO Distributors
+VALUES
+    (5, 'Gizmo Transglobal'),
+    (6, 'Associated Computing, Inc')
+ON CONFLICT (did) DO UPDATE SET dname = Distributors.dname;
 ```
 
 ##### Example 4.2.2
 
 Inserts or updates an item into a NoSQL database. Assumes a unique constraint e.g. a primary key has been violated for an existing item. In this case `DO UPDATE SET` updates the item with an additional attribute.
+
+```SQL
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Customers SCHEMA OPEN
+(
+    HK      INT     NOT NULL PARTITION KEY,
+    RK      INT     NOT NULL SORT KEY,
+);
+```
 
 ```SQL
 -- Existing Item with HK as primary key: {'HK': 1, 'RK': 1, 'myOtherAttr': 5}
@@ -633,18 +702,45 @@ UPDATE EXCLUDED
 
 Inserts or updates two items into a NoSQL database. Assumes a unique constraint like primary key has been violated for an existing item.
 
-In this case the upsert fails as `EXCLUDED` references an attribute which is non-existent for the item that is conflicting.
+In this case the `UPSERT` succeeds; this is because, although `EXCLUDED` references an attribute which is non-existent in `EXCLUDED`, but the implementing database allows the existence of PartiQL value `MISSING` in the schema—the same
+query can lead to a `SemanticError` if the implementing database disallows existence of PartiQL value `MISSING` in the schema.
 
 ```SQL
 -- Existing Item with HK as primary key: 
 --  {'HK': 1, 'RK': 1, 'myAttr': 10}
--- Item after the update: 
---  {'HK': 1, 'RK': 1, 'myAttr': 10}
+-- Items after the update: 
+--  {'HK': 1, 'RK': 1, 'myAttr': MISSING, 'newAttr': 'World'}
+--  {'HK': 4, 'RK': 1, 'someAttr': 'Foo'}
 
 INSERT into Customers
 <<
 {'HK': 4, 'RK': 1, 'someAttr': 'Foo'},
 {'HK': 1, 'RK': 1, 'myAttr': 12, 'anotherAttr': 'hello'}
+>>
+ON CONFLICT
+    DO
+UPDATE SET myAttr = EXCLUDED.someAttr, newAttr = 'World';
+```
+
+In the following example, the insertion leads to a `SemanticError`, because irrespective of implementing database allowing or disallowing existence of PartiQL value `MISSING` in the schema, because the schema is closed, no new attribute can be added to the schema:
+
+```SQL
+-- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
+CREATE TABLE Orders SCHEMA CLOSED
+(
+    OrderId          INT     NOT NULL PARTITION KEY,
+    OrderVolume      INT     NOT NULL SORT KEY,
+);
+
+-- Existing Item with HK as primary key: 
+--  {'OrderId': 1, 'OrderVolume': 1200, 'myAttr': 10}
+-- Item after the update: 
+--  {'OrderId': 1, 'OrderVolume': 1200, 'myAttr': 10}
+
+INSERT into Customers
+<<
+{'OrderId': 4, 'OrderVolume': 2300, 'someAttr': 'Foo'},
+{'OrderId': 1, 'OrderVolume': 1400, 'myAttr': 12, 'anotherAttr': 'hello'}
 >>
 ON CONFLICT
     DO
@@ -852,7 +948,7 @@ UPDATE EXCLUDED;
 #### 1. Grammar Definition Syntax:
 
 ```
-`   < >   Angle brackets delimit character strings that are the names
+   < >   Angle brackets delimit character strings that are the names
          of syntactic elements, the non-terminal symbols of the SQL
          language.
 
@@ -886,7 +982,6 @@ UPDATE EXCLUDED;
          closing brace and the corresponding opening brace "{". If
          an ellipsis appears after any other element, then it applies
          only to that element.
-`
 ```
 
 #### 2. PostgresQL query examples
@@ -917,7 +1012,8 @@ UPDATE EXCLUDED;
     1. https://www.db-fiddle.com/f/kHZSgG9F5EjWPpu99ezLRo/2
     2. https://www.db-fiddle.com/f/rDRSMrUQKJ6D6vEgte6Q58/2
     3. https://www.db-fiddle.com/f/ePbzN3JT2GSgZbvKDULjBe/1
-    4. https://www.db-fiddle.com/f/ePbzN3JT2GSgZbvKDULjBe/0 (an erroneous query)
+    4. https://www.db-fiddle.com/f/dJ4Go1TW3NfDCGa57Vhc6a/0 (with a different field order)
+    5. https://www.db-fiddle.com/f/ePbzN3JT2GSgZbvKDULjBe/0 (an erroneous query)
 
 # Drawbacks
 
