@@ -189,7 +189,7 @@ _In the following examples `CREATE TABLE` including `SCHEMA OPEN` and `SCHEMA CL
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Films SCHEMA CLOSED
+CREATE TABLE Films /* SCHEMA CLOSED */
 (
    code  VARCHAR(40) PRIMARY KEY DEFAULT '1',
    title VARCHAR(100) DEFAULT 'Default Film',
@@ -276,7 +276,7 @@ In the following statement, we insert values to `Music` table, `Music` table has
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Music SCHEMA CLOSED
+CREATE TABLE Music /* SCHEMA CLOSED */
 (
    Artist     VARCHAR(20) NOT NULL,
    SongTitle  VARCHAR(30) NOT NULL,
@@ -294,7 +294,7 @@ In the following statement we insert multiple person items as a bag value to `Pe
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Person SCHEMA OPEN
+CREATE TABLE Person /* SCHEMA OPEN */
 (
    LastName    VARCHAR(50) NOT NULL,
    FirstName   VARCHAR(20),    
@@ -347,7 +347,7 @@ In the following statement, we insert multiple items as a bag value to `Foo` tab
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Foo SCHEMA OPEN
+CREATE TABLE Foo /* SCHEMA OPEN */
 (
    id         INT     NOT NULL PRIMARY KEY,
    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -374,11 +374,11 @@ SELECT * FROM Foo;
 >>;
 ```
 
-The following example statement inserts items from `RockAlbums` table into `Music` table. Both tables have the same layout for required and optional attributes and `Music` table has open schema, therefore the first `INSERT` statement can insert items using a `SELECT *` query. Furthermore, second `INSERT` leads to a `SemanticError` because `RockAlbums` has closed schema.
+The following example statement inserts items from `RockAlbums` table into `Music` table. Both tables have the same layout for required and optional attributes and `Music` table has open schema, therefore the first `INSERT` statement can insert items using a `SELECT *` query. Furthermore, the second `INSERT` leads to a `SemanticError` because `RockAlbums` has closed schema.
 
 ```SQL
 -- The following `CREATE TABLE` is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Music SCHEMA OPEN
+CREATE TABLE Music /* SCHEMA OPEN */
 (
    Artist     VARCHAR(20) NOT NULL,
    SongTitle  VARCHAR(30) NOT NULL,
@@ -390,7 +390,7 @@ CREATE TABLE Music SCHEMA OPEN
 );
 
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE RockAlbums SCHEMA CLOSED
+CREATE TABLE RockAlbums /* SCHEMA CLOSED */
 (
     Artist     VARCHAR(20) NOT NULL,
     SongTitle  VARCHAR(30) NOT NULL,
@@ -426,7 +426,7 @@ The following example statement attempts to insert items from `RockAlbums` table
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Music SCHEMA OPEN
+CREATE TABLE Music /* SCHEMA OPEN */
 (
    Artist     VARCHAR(20) NOT NULL,
    SongTitle  VARCHAR(30) NOT NULL,
@@ -438,7 +438,7 @@ CREATE TABLE Music SCHEMA OPEN
 );
 
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE RockAlbums SCHEMA CLOSED
+CREATE TABLE RockAlbums /* SCHEMA CLOSED */
 (
     Artist     VARCHAR(20) NOT NULL,
     SongTitle  VARCHAR(30) NOT NULL,
@@ -456,7 +456,7 @@ The following example statement, inserts some rows into table `Films`:
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Foo SCHEMA CLOSED
+CREATE TABLE Foo /* SCHEMA CLOSED */
 (
    id         INT     NOT NULL PRIMARY KEY,
    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -491,7 +491,7 @@ The following statements lead to a `SemanticError`:
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Foo SCHEMA OPEN
+CREATE TABLE Foo /* SCHEMA OPEN */
 (
    id         int     NOT NULL PRIMARY KEY,
    is_deleted boolean NOT NULL DEFAULT FALSE,
@@ -607,7 +607,7 @@ Inserts or updates new distributors in a relational database. Assumes a unique i
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Distributors SCHEMA CLOSED
+CREATE TABLE Distributors /* SCHEMA CLOSED */
 (
     did       INT     NOT NULL PRIMARY KEY,
     dname     VARCHAR(50),
@@ -662,7 +662,7 @@ Inserts or updates an item into a NoSQL database. Assumes a unique constraint e.
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Customers SCHEMA OPEN
+CREATE TABLE Customers /* SCHEMA OPEN */
 (
     HK      INT     NOT NULL PARTITION KEY,
     RK      INT     NOT NULL SORT KEY,
@@ -726,7 +726,7 @@ In the following example, the insertion leads to a `SemanticError`, because irre
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
-CREATE TABLE Orders SCHEMA CLOSED
+CREATE TABLE Orders /* SCHEMA CLOSED */
 (
     OrderId          INT     NOT NULL PARTITION KEY,
     OrderVolume      INT     NOT NULL SORT KEY,
