@@ -185,7 +185,7 @@ Optional attributes in target schema that have the same name in the resulting tu
 
 In the following examples, `Films` table has a closed schema. In the table `len` attribute is implicitly defined as nullable.
 
-_In the following examples `CREATE TABLE` including `SCHEMA OPEN` and `SCHEMA CLOSED` syntax is arbitrary since the PartiQL DDL is yet to be defined._
+_In the following examples `CREATE TABLE` including `SCHEMA OPEN` and `SCHEMA CLOSED` syntax is arbitrary since the PartiQL DDL is yet to be defined—see the "Terminology" section for open and closed schema definitions._
 
 ```SQL
 -- The following `CREATE TABLE` syntax is arbitrary since the PartiQL DDL is yet to be defined:
@@ -599,7 +599,7 @@ In addition to the existing rows or items, `ON CONFLICT` and `WHERE` clauses hav
 Finally, `INSERT` with an `ON CONFLICT DO UPDATE` or `ON CONFLICT DO REPLACE` clause MUST be a “deterministic” statement. This means that the command MUST not be allowed to affect any single existing row or item more than once; a `SemanticError` (E.g. cardinality violation error) MUST be raised when this situation arises. Rows resulting from insertion after conflict, should not duplicate each other in terms of attributes constrained by an arbiter index or constraint. See “ON CONFLICT DO REPLACE Examples” section for more clarification.
 
 #### ON CONFLICT DO UPDATE Examples
-_In the following examples `CREATE TABLE` including `SCHEMA OPEN` and `SCHEMA CLOSED` syntax is arbitrary since the PartiQL DDL is yet to be defined._
+_In the following examples `CREATE TABLE` including `SCHEMA OPEN` and `SCHEMA CLOSED` syntax is arbitrary since the PartiQL DDL is yet to be defined—see the "Terminology" section for open and closed schema definitions._
 
 ##### Example 4.2.1
 
