@@ -1,6 +1,6 @@
 - Start Date: 2022-09-15
 - PartiQL Issue [partiql/partiql-docs/#27](https://github.com/partiql/partiql-docs/issues/27)
-- RFC PR: (fill me in with the PR link once PR is created)
+- RFC PR: [partiql/partiql-docs/#30](https://github.com/partiql/partiql-docs/pull/30)
 
 # Summary
 [summary]: #summary
