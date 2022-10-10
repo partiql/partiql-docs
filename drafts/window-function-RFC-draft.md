@@ -21,8 +21,8 @@ Since introduced, window functions are supported by major database systems, such
 ## Out of scope
 
 * We focus on the LEAD/LAG function in this doc. Other window functions, along with the usage of aggregation functions as window function, is out of the scope for now.
-* Since LEAD/LAG operates on PARTITION only, the `FRAME` concept is out of the scope for now. (To the best of our knowledge, the purposed semantics can be extended to support `FRAME` clause)  (See [POC on FRAME clause support](https://quip-amazon.com/oG7dAQbw6ZPv#temp:C:VXX3159a3bb43b64d8e947e4f8a8)).
-* SQL spec allows for the usage of additional `IGNORE NULLS` or `RESPECT NULLS` with `LAG` / `LEAD` functions along with some other window functions. For now we do not support it as only some mainstream SQL vendor support it. (See: [NULL TREATMENT Semantics](https://quip-amazon.com/oG7dAQbw6ZPv#temp:C:VXX709ef83d8e234751b2cc5547e)).
+* Since LEAD/LAG operates on PARTITION only, the `FRAME` concept is out of the scope for now. (To the best of our knowledge, the purposed semantics can be extended to support `FRAME` clause)  (See [POC on FRAME clause support](#poc-on-frame-clause-support)).
+* SQL spec allows for the usage of additional `IGNORE NULLS` or `RESPECT NULLS` with `LAG` / `LEAD` functions along with some other window functions. For now we do not support it as only some mainstream SQL vendor support it. (See: [NULL TREATMENT Semantics](#null-treatment-semantics)).
 
 ## Proposed grammar
 
@@ -539,4 +539,25 @@ As a road map to be feature compatible with SQL’s window function, in the futu
 2. Extends our semantics and window operator for Frame clause. i.e., RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
 3. Supports other window functions that operates on frame. i.e. first_value
 4. Support usage of aggregation functions as window function. 
+
+# Appendix
+## POC on FRAME clause support
+We can modify the windowed clause to
+```sql
+WINDOWED (
+PARTITION BY ...
+ORDER BY ...
+RANGE | ROW ... // the SQL syntax here
+) PARTITION AS p AT pos FRAME as f
+```
+Notice that for function that uses frame, for example first_value, the rewriting rule is in charge of “directing” the function to frame.
+For example:
+```
+first_value(${expr}, ${offset}, ${default}) OVER (...)
+-> coll_first_value(SELECT ${expr} FROM f)
+```
+
+## NULL TREATMENT Semantics
+The semantics is to find the nth non-null value of x starting from current row if IGNORE NULLS is specified.
+IGNORE NULLS [example](http://sqlfiddle.com/#!4/09d79/8) in Oracle
 
