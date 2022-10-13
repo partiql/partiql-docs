@@ -182,16 +182,17 @@ CREATE TABLE Films /* SCHEMA CLOSED */
    len VARCHAR(50)
 );
 ```
-Since both `UPSERT` and `REPLACE` in this case is actually an `INSERT` operation, we use `UPSERT/REPLACE` in the following examples to represent either `UPSERT` or `REPLACE` syntax.
 
 #### Example 5.1
 
 The following statements insert items while the `len` attribute is omitted in the target attributes and the implementing database allows using default value or `NULL` for the omitted attributes in the target attributes. In addition, implementing database sets the value of `len` to `NULL` — this is because based on the DDL for `Films`, `len` is nullable.
 
 ```SQL
-UPSERT/REPLACE INTO Films VALUES ('UA502', 'Bananas', 105, '1971-07-13', 'Comedy', '82 minutes');
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Films VALUES ('UA502', 'Bananas', 105, '1971-07-13', 'Comedy', '82 minutes');
 
-UPSERT/REPALCE INTO Films (code, title, did, date_prod, kind)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Films (code, title, did, date_prod, kind)
 VALUES ('UA502', 'Bananas', 105, '1971-07-13', 'Comedy', '82 minutes');
 ```
 
@@ -204,13 +205,16 @@ For the second query, the `len` attribute is omitted in the target attributes an
 For the third query, the `kind` attribute is omitted in the target attributes and the order of attributes has changed. In this case, the implementing database allows using a different order and default value or `NULL` for the omitted attributes. Therefore, implementing database sets the value of `kind` to its default value 'Comedy':
 
 ```SQL
-UPSERT/REPLACE INTO Films
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Films
 VALUES ('UA503', 'Bananas', 105, DEFAULT, 'Comedy', DEFAULT);
 
-UPSERT/REPLACE INTO Films (code, title, did, date_prod, kind)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Films (code, title, did, date_prod, kind)
 VALUES ('T_603', 'Yojimbo', 106, DEFAULT, 'Drama');
 
-UPSERT/REPLACE INTO films (title, code, did, date_prod, len)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO films (title, code, did, date_prod, len)
 VALUES ('MyTitle', 'MyCode', 108, '1961-06-16', '180 minutes');
 
 SELECT * FROM Films;<<
@@ -242,7 +246,8 @@ SELECT * FROM Films;<<
 The following example statement inserts a row or item consisting entirely of default values:
 
 ```SQL
-UPSERT/REPLACE INTO Films DEFAULT VALUES;
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Films DEFAULT VALUES;
 ```
 
 #### Example 5.3
@@ -250,7 +255,8 @@ UPSERT/REPLACE INTO Films DEFAULT VALUES;
 The following example statement inserts multiple rows using the multi-row VALUES syntax:
 
 ```SQL
-UPSERT/REPLACE INTO Films (code, title, did, date_prod, kind)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Films (code, title, did, date_prod, kind)
 VALUES ('B6717', 'Tampopo', 110, '1985-02-10', 'Comedy'),
        ('HG120', 'The Dinner Game', 140, DEFAULT, 'Comedy');
 ```
@@ -268,7 +274,8 @@ CREATE TABLE Music /* SCHEMA CLOSED */
    PRIMARY KEY (Artist, SongTitle)
 );
 
-UPSERT/REPLACE INTO Music
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Music
 <<
 {'Artist' : 'Acme Band', 'SongTitle' : 'PartiQL Rocks'},
 {'Artist' : 'Emca Band', 'SongTitle' : 'PartiQL Rocks'}
@@ -288,7 +295,8 @@ In the following statement we insert multiple person items as a bag value to `Pe
    PRIMARY KEY (LastName)
 );
 
-UPSERT/REPLACE INTO Person<<
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Person<<
 {'FirstName' : 'Raul','LastName' : 'Lewis','DOB' : 1963-08-19T,'GovId' : 'LEWISR261LL','GovIdType' : 'Driver License',
 },{'LastName' : 'Logan','DOB' : 1967-07-03T,'Address' : '43 Stockert Hollow Road, Everett, WA, 98203'
 },{'LastName' : 'Pena','DOB' : 1974-02-10T,'GovId' : '744 849 301','GovIdType' : 'SSN','Address' : '4058 Melrose Street, Spokane Valley, WA, 99206'
@@ -318,7 +326,8 @@ CREATE TABLE Foo /* SCHEMA OPEN */
 -- In the following, inserting `{ 'id': 1 }` goes through because the rest of the attributes either have default value or
 -- are nullable. In addition, because `Foo` has open-schema we can add `value` as a new attribute to the table.
 
-UPSERT/REPLACE INTO Foo
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Foo
 <<
 { 'id': 1 },
 { 'id': 2, 'title': 'some-name' },
@@ -364,13 +373,15 @@ CREATE TABLE RockAlbums /* SCHEMA CLOSED */
 );
 
 -- The following query goes through because `Price` attribute is nullable.
-UPSERT/REPLACE INTO Music
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Music
 SELECT *
 FROM RockAlbums
 WHERE RockGenre IN ('Alternative', 'SpaceRock');
 
 -- The following leads to a `SemanticError` because `RockAlbums` has closed schema.
-UPSERT/REPLACE INTO RockAlbums
+-- Same example is applicable to `REPLACE`
+UPSERT INTO RockAlbums
 SELECT *
 FROM Music;
 ```
@@ -378,7 +389,8 @@ FROM Music;
 The following statement shows that the values can be specified with a sub-select. The INSERT goes through because the values that are not `SELECT` default to `NULL`.
 
 ```SQL
-UPSERT/REPLACE INTO Music (Artist, SongTitle, AlbumTitle)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Music (Artist, SongTitle, AlbumTitle)
 SELECT Artist, SongTitle, AlbumTitle
 FROM RockAlbums
 WHERE RockGenre IN ('Alternative', 'SpaceRock');
@@ -412,7 +424,8 @@ CREATE TABLE RockAlbums /* SCHEMA CLOSED */
     PRIMARY KEY (Artist, SongTitle)
 );
 
-UPSERT/REPLACE INTO Music
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Music
 SELECT * FROM RockAlbums;
 ```
 
@@ -430,7 +443,8 @@ CREATE TABLE Foo /* SCHEMA CLOSED */
    bar        VARCHAR(10) DEFAULT 'baz'
 );
 
-UPSERT/REPLACE INTO Foo (id, title)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Foo (id, title)
 <<
 [2, 'some-name'],
 >>;
@@ -469,7 +483,8 @@ CREATE TABLE Foo /* SCHEMA OPEN */
 
 -- `SemanticError` because of the presence of target attribute names with bag of tuples.
 -- In this case, the behavior for adding or not adding attributes like `is_deleted` is undefined.
-UPSERT/REPLACE INTO Foo (id, title)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Foo (id, title)
 <<
 { 'id': 1 },
 { 'id': 2, 'title': 'some-name' },
@@ -478,27 +493,31 @@ UPSERT/REPLACE INTO Foo (id, title)
 
 
 -- `SemanticError` because not all <bag value> items (row values) can get mapped to the target attributes set.
-UPSERT/REPLACE INTO Foo (id, title)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Foo (id, title)
 <<
 [2, 'some-name'],1,'some-other-name'
 >>;
 
 -- `SemanticError` because UPSERT/REPLACE has more target attributes than row values specified by some of the `<bag value>` elements (E.g. `[1]`).
-UPSERT/REPLACE INTO Foo (id, title)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Foo (id, title)
 <<
 [1],
 [1, 'some_name']
 >>;
 
 -- `SemanticError` because usage of `DEFAULT` outside `VALUES(...)` is unsupported.
-UPSERT/REPLACE INTO Foo (id, title)
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Foo (id, title)
 <<
 [1, DEFAULT],
 [2, 'some-name']
 >>;
 
 -- `SemanticError` because usage of `DEFAULT` outside `VALUES(...)` is unsupported.
-UPSERT/REPLACE INTO Foo
+-- Same example is applicable to `REPLACE`
+UPSERT INTO Foo
 <<
 {'id': 1, 'is_deleted': DEFAULT},
 {'id': 2, 'is_deleted': true}
