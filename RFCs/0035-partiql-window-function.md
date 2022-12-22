@@ -3,7 +3,7 @@
 ## Summary
 
 This RFC purposes the semantics for using SQL’s window functions that operate on partitions in PartiQL. 
-In this RFC, we first introduce a data model to express SQL’s windowed table in nested data, 
+In this RFC, we first introduce a data model to express SQL’s windowed table in nested data format, 
 then we define a PartiQL Core `WINDOWED` clause that incorporates the nested data into the produced binding tuples.
 Next, we demonstrate how to perform operations over the produced binding tuple.
 Finally, we show that PartiQL’s window function semantic is backward compatible to SQL.
@@ -18,24 +18,24 @@ This RFC purposes the semantics for **window partition** in PartiQL. Subsequent 
 
 ### Out of scope
 
-* This RFC focus on explaining the semantics of PartiQL’s window functions. The PartiQL core syntax provided in this RFC is for guidance only. Finalizing grammar and syntax is out of the scope. 
+* This RFC focus on explaining the semantics of PartiQL’s window functions. The PartiQL core syntax provided in this RFC is for guidance only. Finalizing grammar and syntax is out of the scope, excluding the supported SQL compatible window function. 
 * SQL’s window implicitly defines three concepts, partition, frame, and peer. As a first step, this RFC focus on partition only, the concept of frame and peer are out of scope for now, but some preliminary work has been done to make sure the other concepts can fit into the framework in a modular fashion.
-* An exhaustive mapping between SQL’s window function and PartiQL’s window function is out of the scope. In this RFC, we only define the mapping between SQL’s `lag` function and PartiQL’s `coll_lag` as an example. The mapping between other functions are skipped.
+* An exhaustive mapping between SQL’s window function and PartiQL’s expression is out of the scope. In this RFC, we only define the mapping between SQL’s `lag` function and it's corresponding PartiQL expression as an example. The mapping between other functions are skipped.
 
 We assume that the readers of this RFC has basic understanding of SQL’s window function and PartiQL semantics.
 
 ### Terminology
 
-1. RFC key word: MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, etc. See Appendix item 2 for detail. 
+1. RFC key word: MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, etc. See Appendix (1) for detail. 
 2. Windowed Table and Window: Windowed table is a defined in SQL spec 2011, section 4.15.14. A **windowed table** is a table together with one or more windows. A **window** is a transient data structure associated
    with a table expression. A window is defined explicitly by a window definition or implicitly by an inline window specification. Implicitly defined windows have an implementation-dependent window name. A
    **window** is used to specify window partitions and window frames, which are collections of rows used in the definition of **window functions**.
 3. Partition: To distinguish between SQL's definition of window, in this RFC, the term **partition** refers to the window partition specified for each row. See [SQL’s Windowed Table As Nested Data](#SQL’s-Windowed-Table-As-Nested-Data) for details. 
-4. Equivalent Partition: Two binding tuples $b, b' \in B^{in}_{WINDOWED} are in the same equivalence partition if and only if every partition expression $e_i$ evaluates to equivalent values $v_i$ (when evaluted on b) and $v_i'$ (when evaluated on b'). 
+4. Equivalent Partition: Two binding tuples $b, b' \in B^{in}_{WINDOWED}$ are in the same equivalence partition if and only if every partition expression $e_i$ evaluates to equivalent values $v_i$ (when evaluted on b) and $v_i'$ (when evaluated on $b'$). 
 
 ### SQL’s Windowed Table As Nested Data
 In this section, we introduce a way to model SQL's windowed table as nested data.
-Notice that the nested data format, although not fitting in SQL's formal semantics, provides a simple and intuitive model to understand window function results, and forms the basis for PartiQL's window semantics. 
+Notice that the nested data format, although not fitting in SQL's formal semantics, provides a simple and intuitive way to understand window function results, and forms the basis for PartiQL's window semantics. 
 
 SQL’s in-line window function that operates without frame clause looks like:
 
@@ -48,7 +48,7 @@ SQL’s in-line window function that operates without frame clause looks like:
 
 That is, a window function followed by a `OVER` clause.
 
-Notice that SQL’s OVER clause is more expressive, for example, it may support an additional optional `frame` sub-clause and define a peer group implicitly. In this RFC, we focus on the **partition** defined by the `OVER` clause and the following sub-clauses:
+Notice that SQL’s `OVER` clause is more expressive, for example, it may support an additional optional `frame` sub-clause and define a peer group implicitly. In this RFC, we focus on the **partition** defined by the `OVER` clause and the following sub-clauses:
 
 **PARTITION BY**:  Partitions the input by one or more expression and turns the input into independent groups, and thereby restricts the window of a tuple. Unlike `GROUP BY`/normal aggregation, the window function does not reduce all tuples of a group into a single tuple, but only logically partitions the tuples into group. If no `PARTITION BY` is specified, the entire table is considered as belonging to the same partition.
 
@@ -101,7 +101,7 @@ Let us consider a simple example with no `PARTITION BY` and `ORDER BY` sub-claus
 
 `<func> OVER () -- window specification is empty`.
 
-![Example 1.1 Graph](./0035-partiql-window-function/Example 1.1.png)
+![Example 1.1 Graph](./0035-partiql-window-function/Example_1_1.png)
 
 The above figure shows the original table with partition for each row. Notice that
 since there is no `PARTITION BY` sub-clause, the entire table are considered as within the same partition 
@@ -161,9 +161,9 @@ Window specification has PARTITION BY sub-clause
 
 `<func> OVER (PARTITION BY ticker) -- has partition by sub-clause`
 
-![Example 1.2 Graph](./0035-partiql-window-function/Example 1.2.png)
+![Example 1.2 Graph](./0035-partiql-window-function/Example_1_2.png)
 
-Since there is a `PARTITION BY` clause, the partition is limited to all the rows that has the same `ticker` value.
+Since there is a `PARTITION BY` clause, the partition is limited to all rows that have the same `ticker` value.
 
 Similarly, the result in nested data format will be: 
 ```
@@ -203,7 +203,7 @@ Window specification has ORDER BY sub-clause
 
 `<func> OVER (ORDER BY price) -- has ORDER BY sub-clause`
 
-![Example 1.3 Graph](./0035-partiql-window-function/Example 1.3.png)
+![Example 1.3 Graph](./0035-partiql-window-function/Example_1_3.png)
 
 ```
 <<
@@ -260,7 +260,7 @@ Notice that to demonstrate the difference visually, the result will be sorted in
 
 `<func> OVER (PARTITION BY ticker ORDER BY price DESC)  -- has PARTITION BY and ORDER BY sub-clause`
 
-![Example 1.4 Graph](./0035-partiql-window-function/Example 1.4.png)
+![Example 1.4 Graph](./0035-partiql-window-function/Example_1_4.png)
 
 ```
 <<
@@ -301,7 +301,7 @@ The PartiQL `WINDOWED` clause can be thought of a standalone operator that input
 This section proceed in three steps: 
  - Section [WINDOWED Clause](#WINDOWED-Clause) explains the core PartiQL WINDOWED structure and the binding tuples created by `WINDOWED` clause.
  - Section [Operations on Partition](#Operations-Over-Partition) explains how to perform operation over the produced partition data. 
- - Section [SQL Compatibility](#SQL-Compatibility) shows that SQL's window functions can be explained over by PartiQL's `WINDOWED` clause and window functions. 
+ - Section [SQL Compatibility](#SQL-Compatibility) shows that SQL's window functions can be explained over by PartiQL's `WINDOWED` clause and expressions. 
 
 
 #### WINDOWED Clause 
@@ -317,18 +317,18 @@ WINDOWED (
 
 Where $e_1,...,e_n$ is a list of **partition expressions**, $o_1,....,o_n$ is a list of **ordering expressions**, $p$ is the **partition variable**, and $pos$ is the **position variable** which indicates the position of the current row in the partition.
 
-The `WINDOWED clause` can be viewed as a modular function, with $B^{in}_{WINDOWED}$ (a bag of binding tuples) as an input parameter to the function.
+The `WINDOWED` clause can be viewed as a modular function, with $B^{in}_{WINDOWED}$ (a bag of binding tuples) as an input parameter to the function.
 
 
 1. PARTITION BY sub-clause:
 
-* If PARTITION BY is presented: $B^{in}_{WINDOWED}$ is partitioned into the minimal number of equivalence partition $B_1,...,B_n$. The equivalence rule is the same as the one used in `GROUP BY` clause (Appendix 1). 
+* If PARTITION BY is presented: $B^{in}_{WINDOWED}$ is partitioned into the minimal number of equivalence partition $B_1,...,B_n$. The equivalence rule is the same as the one used in `GROUP BY` clause (Appendix 2). 
 * If there is no `PARTITION BY`, the entire input binding collection is considered as one partition.
 * Each of the $B_i$ produced by `PARTITION BY` SHALL be a list instead of a bag, even though the order is non-deterministic at the moment. The partition needs to be a list because we want to use the index to locate the original row.
 
 2. ORDER BY sub-clause:
 
-* If ORDER BY is presented, each equivalence partition is ordered based on the rules defined in Spec Section 12.
+* If ORDER BY is presented, each equivalence partition is ordered based on the rules defined in Spec Section 12 (Appendix 3).
 * Notice that the ORDER BY in WINDOWED clause applies to partition only, it does not necessarily affect the final order of the result.
 
 3. WINDOWED clause output:
@@ -672,10 +672,28 @@ The output binding collection is:
     stock : {'trade_date': 2022-09-30, 'ticker': NULL, 'price': 96.15},
     p : [
           <stock : {'trade_date': 2022-09-30, 'ticker': 'NULL', 'price': 96.15}>,
-          <stock : {'trade_date': 2022-10-03, 'price': 96.15}>,
+          <stock : {'trade_date': 2022-10-03, 'price': 100.00}>,
           <stock : {'price': 200.00}>
         ],
     pos: 0
+   >,
+   <
+    stock : {'trade_date': 2022-10-03, 'price': 100.00},
+    p : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'NULL', 'price': 96.15}>,
+          <stock : {'trade_date': 2022-10-03, 'price': 100.00}>,
+          <stock : {'price': 200.00}>
+        ],
+    pos: 1
+   >,
+   <
+    stock : {'price': 200.00},
+    p : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'NULL', 'price': 96.15}>,
+          <stock : {'trade_date': 2022-10-03, 'price': 100.00}>,
+          <stock : {'price': 200.00}>
+        ],
+    pos: 2
    > 
 >>
 ```
@@ -687,7 +705,7 @@ The `WINDOWED` clause computes the partition for each row and carry the partitio
 
 Like other clauses, the output of binding tuples from `WINDOWED` clauses becomes the input of next operator. 
 
-The scoping rules and path navigation behaves as normal. 
+The scoping rules and path navigation behave as normal. 
 
 Example 2.2.1: 
 
@@ -748,7 +766,8 @@ WINDOW w1 AS (PARTITION BY ticker)
 ```
 The above three queries are functionally the same.
 
-To rewrite a query in SQL’s window function syntax to PartiQL syntax:
+We can rewrite a query in SQL’s window function syntax to PartiQL syntax.
+
 Suppose that a query:
 1. Is a SELECT query
 2. the SELECT clause contains one or more SQL window function (identified by OVER)
@@ -1121,31 +1140,32 @@ The first row returns `{ 'previous_a': 'Out of Partition' }` because current row
 The second row returns an empty struct `{}` , this is because the current row is now the second row, and `lag(sp.a)` essentially evaluates `sp.a` over the binding tuple `{ 'trade_date': `2022-09-30`, 'ticker': 'AMZN', 'price': 113.00}`. Since there is no binding name `a` in the binding tuple, the query returns `missing` in permissive mode.
 
 ### Appendix
-1. [PartiQL Spec section 11.1.1](https://partiql.org/assets/PartiQL-Specification.pdf#subsection.11.1.1) details the equivalence function **eqg**. The same function is used in determines if two partition expressions are equivalent. 
-2. [Key words for use in RFCs to Indicate Requirement Levels](https://datatracker.ietf.org/doc/html/rfc2119) shows the meaning of key words "MUST", "MUST NOT", "REQUIRED", etc. 
-3. Concept of partition, peer, and frame demonstration: https://www.db-fiddle.com/f/n2UzaKfcbYVHFJ7CBwhvh7/1
-4. SQL spec 2011 window function semantics pointer: 
+1. [Key words for use in RFCs to Indicate Requirement Levels](https://datatracker.ietf.org/doc/html/rfc2119) shows the meaning of key words "MUST", "MUST NOT", "REQUIRED", etc.
+2. [PartiQL Spec section 11.1.1](https://partiql.org/assets/PartiQL-Specification.pdf#subsection.11.1.1) explains the equivalence function **eqg**. The same function is used in determines if two partition expressions are equivalent.
+3. [PartiQL Spec section 12.2](https://partiql.org/assets/PartiQL-Specification.pdf#subsection.12.2) explains the PartiQL order-by less-then function. The same function is used to ordering equivalence partition. 
+4. Concept of partition, peer, and frame demonstration: https://www.db-fiddle.com/f/n2UzaKfcbYVHFJ7CBwhvh7/1
+5. SQL spec 2011 window function semantics pointer: 
    - 4.15.14 Windowed tables
    - 4.16.3 Window functions
    - 6.10 Window functions
    - 7.11 Window clause
-5. Window functions defined in SQL spec
+6. Window functions defined in SQL spec
 
-| Window function type	    | Scope	     | Description                                 | PARTITION BY requirement | ORDER BY requirement | Frame requirement     |
-|--------------------------|------------|---------------------------------------------|--------------------------|----------------------|-----------------------|
-| lead()                   | Partition	 | evaluate expr on preceding row in partition |                          | shall be present     | shall not be present	 |
-| lag()                    | Partition	 | evaluate expr on following row in partition | 	                        | shall be present     | shall not be present	 |
-| first_expr()             | Frame	     | evaluate expr on first row of the frame     | 	                        | 	                    | 	                     |
-| last_expr()              | Frame	     | evaluate expr on last row of the frame      | 	                        | 	                    | 	                     |
-| nth_expr()               | Frame	     | evaluate expr on nth row of the frame       | 	                        | 	                    | 	                     |
-| rank()                   | Partition	 | rank of the current row with gaps           | 	                        | shall be present     | shall not be present	 |
-| dense_rank()             | Partition	 | rank of the current row without gaps        | 	                        | shall be present     | shall not be present	 |
-| row_number()             | Partition	 | row number of the current rows              | 	                        | 	                    | shall not be present	 |
-| ntile()                  | Partition	 | distribute. evenly over buckets             | 	                        | shall be present     | shall not be present	 |
-| precent_rank()           | Parititon	 | relative rank of the current row            | 	                        | 	                    | shall not be present	 |
-| cume_dist()              | Partition	 | relative rank of the peer group             | 	                        | 	                    | shall not be present	 |
-| <agg func>(DISTINCT ...) | Partition	 | compute distinct aggregate over partition   | 	                        | 	                    | shall not be present	 |
-| <agg func>(ALL ...)      | Frame	     | compute aggregate over frame                | 	                        | 	                    | 	                     |
+| Window function type	  | Scope	     | Description                                 | PARTITION BY requirement | ORDER BY requirement | Frame requirement     |
+|------------------------|------------|---------------------------------------------|--------------------------|----------------------|-----------------------|
+| lead()                 | Partition	 | evaluate expr on preceding row in partition |                          | shall be present     | shall not be present	 |
+| lag()                  | Partition	 | evaluate expr on following row in partition | 	                        | shall be present     | shall not be present	 |
+| first_expr()           | Frame	     | evaluate expr on first row of the frame     | 	                        | 	                    | 	                     |
+| last_expr()            | Frame	     | evaluate expr on last row of the frame      | 	                        | 	                    | 	                     |
+| nth_expr()             | Frame	     | evaluate expr on nth row of the frame       | 	                        | 	                    | 	                     |
+| rank()                 | Partition	 | rank of the current row with gaps           | 	                        | shall be present     | shall not be present	 |
+| dense_rank()           | Partition	 | rank of the current row without gaps        | 	                        | shall be present     | shall not be present	 |
+| row_number()           | Partition	 | row number of the current rows              | 	                        | 	                    | shall not be present	 |
+| ntile()                | Partition	 | distribute. evenly over buckets             | 	                        | shall be present     | shall not be present	 |
+| precent_rank()         | Parititon	 | relative rank of the current row            | 	                        | 	                    | shall not be present	 |
+| cume_dist()            | Partition	 | relative rank of the peer group             | 	                        | 	                    | shall not be present	 |
+| agg_func(DISTINCT ...) | Partition	 | compute distinct aggregate over partition   | 	                        | 	                    | shall not be present	 |
+| agg_func(ALL ...)      | Frame	     | compute aggregate over frame                | 	                        | 	                    | 	                     |
 
 
 
