@@ -10,7 +10,7 @@ Finally, we show that PartiQL’s window function semantic is backward compatibl
 
 ## Motivation
 
-Window functions, also known as analytic OLAP functions, have been introduced as part of the SQL standard since 2003. Window functions allow users to express many useful query, such as time series analysis, ranking, moving averages, etc. Formulating such queries in plain SQL-92 can be cumbersome and inefficient, if even possible.
+Window functions, also known as analytic OLAP functions, have been introduced as part of the SQL standard since 2003. Window functions allow users to express many useful queries, such as time series analysis, ranking, moving averages, etc. Formulating such queries in plain `SQL-92` can be cumbersome and inefficient, if even possible.
 
 This RFC purposes the semantics for **window partition** in PartiQL. Subsequent RFCs are expected to cover other concepts in window function such as **peer** and **window frame**.
 
@@ -18,8 +18,8 @@ This RFC purposes the semantics for **window partition** in PartiQL. Subsequent 
 
 ### Out of scope
 
-* This RFC focus on explaining the semantics of PartiQL’s window functions. The PartiQL core syntax provided in this RFC is for guidance only. Finalizing grammar and syntax is out of the scope, excluding the supported SQL compatible window function. 
-* SQL’s window implicitly defines three concepts, partition, frame, and peer. As a first step, this RFC focus on partition only, the concept of frame and peer are out of scope for now, but some preliminary work has been done to make sure the other concepts can fit into the framework in a modular fashion.
+* This RFC focuses on explaining the semantics of PartiQL’s window functions. The PartiQL core syntax provided in this RFC is for guidance only and specification of actual PartiQL core syntax as opposed to SQL compatible syntax is out of the scope of this RFC.
+* SQL’s window implicitly defines three concepts, `PARTITION`, `FRAME`, and `PEER`. As a first step, this RFC focuses on `PARTITION` only; `FRAME` and `PEER` concepts are out of scope for now, but some preliminary work has been done to make sure the other concepts can fit into the framework in a modular fashion.
 * An exhaustive mapping between SQL’s window function and PartiQL’s expression is out of the scope. In this RFC, we only define the mapping between SQL’s `lag` function and it's corresponding PartiQL expression as an example. The mapping between other functions are skipped.
 
 We assume that the readers of this RFC has basic understanding of SQL’s window function and PartiQL semantics.
@@ -27,7 +27,7 @@ We assume that the readers of this RFC has basic understanding of SQL’s window
 ### Terminology
 
 1. RFC key word: MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, etc. See Appendix (1) for detail. 
-2. Windowed Table and Window: Windowed table is a defined in SQL spec 2011, section 4.15.14. A **windowed table** is a table together with one or more windows. A **window** is a transient data structure associated
+2. Windowed Table and Window: Windowed table is as defined in SQL spec 2011, section 4.15.14. A **windowed table** is a table together with one or more windows. A **window** is a transient data structure associated
    with a table expression. A window is defined explicitly by a window definition or implicitly by an inline window specification. Implicitly defined windows have an implementation-dependent window name. A
    **window** is used to specify window partitions and window frames, which are collections of rows used in the definition of **window functions**.
 3. Partition: To distinguish between SQL's definition of window, in this RFC, the term **partition** refers to the window partition specified for each row. See [SQL’s Windowed Table As Nested Data](#SQL’s-Windowed-Table-As-Nested-Data) for details. 
@@ -297,7 +297,7 @@ Notice that to demonstrate the difference visually, the result will be sorted in
 ### PartiQL’s Window Function Semantics
 
 In the following section, we first define the semantics for `WINDOWED` clause in PartiQL.
-The PartiQL `WINDOWED` clause can be thought of a standalone operator that inputs a collection of binding tuples and outputs a collection of binding tuples.
+The PartiQL `WINDOWED` clause can be thought of as a standalone operator that inputs a collection of binding tuples and outputs a collection of binding tuples.
 This section proceed in three steps: 
  - Section [WINDOWED Clause](#WINDOWED-Clause) explains the core PartiQL WINDOWED structure and the binding tuples created by `WINDOWED` clause.
  - Section [Operations on Partition](#Operations-Over-Partition) explains how to perform operation over the produced partition data. 
