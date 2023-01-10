@@ -3,8 +3,7 @@
 ## Summary
 
 This RFC purposes the semantics for PartiQL core window clause and PartiQL syntactic sugar for using the SQL window function syntax.
-In this RFC, we first introduce a data model to express SQL’s windowed table in nested data format, 
-then we define a PartiQL Core `WINDOWED` clause that incorporates the nested data into the produced binding tuples.
+In this RFC, we introduce a PartiQL Core `WINDOWED` clause as a function that accepts a bag of binding tuples as input and uses a nested data-model — to express SQL's windowed table — to produce a bag of binding tuples as it's output.
 Next, we demonstrate how to perform operations over the produced binding tuple.
 Finally, we show that PartiQL’s window function semantic is backward compatible to SQL.
 
@@ -26,14 +25,18 @@ We assume that the readers of this RFC has basic understanding of SQL’s window
 
 ### Terminology
 
-1. RFC key word: MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, etc. See Appendix (1) for detail. 
+1. RFC key word: The keywords “MUST”, “MUST NOT”, “REQUIRED”, “SHALL”, “SHALL NOT”, “SHOULD”, “SHOULD NOT”, “RECOMMENDED”, “MAY”, and “OPTIONAL” are as described in [Key Words RFC2119](https://datatracker.ietf.org/doc/html/rfc2119).
 2. Windowed Table and Window: Windowed table is as defined in SQL spec 2011, section 4.15.14. A **windowed table** is a table together with one or more windows. A **window** is a transient data structure associated
    with a table expression. A window is defined explicitly by a window definition or implicitly by an inline window specification. Implicitly defined windows have an implementation-dependent window name. A
    **window** is used to specify window partitions and window frames, which are collections of rows used in the definition of **window functions**.
 3. Partition: To distinguish between SQL's definition of window, in this RFC, the term **partition** refers to the window partition specified for each row. See [Partition As Nested Data](#Partition-As-Nested-Data) for details. 
 4. Equivalent Partition: Two binding tuples $b, b' \in B^{in}_{WINDOWED}$ are in the same equivalence partition if and only if every partition expression $e_i$ evaluates to equivalent values $v_i$ (when evaluated on b) and $v_i'$ (when evaluated on $b'$). 
-5. PartiQL core and PartiQL syntactic sugar: From [PartiQL Spec Section 1](https://partiql.org/assets/PartiQL-Specification.pdf#section.1): In the interest of precision and succinctness, we tier the PartiQL specification in two layers: The PartiQL core is a functional programming language with composable aspects. Three aspects of the PartiQL core syntax and semantics are characteristic of its functional orientation: Every (sub)query and every (sub) expression input and output PartiQL data. Second, each clause of a SELECT query is itself a function. Third, every (sub)query evaluates within the environment created by the database names and the variables of the enclosing queries.
+5. PartiQL core and PartiQL syntactic sugar: The PartiQL core is a functional programming language with composable aspects. Three aspects of the PartiQL core syntax and semantics are characteristic of its functional orientation:
+  - Every (sub)query and every (sub) expression input and output PartiQL data.
+  - Second, each clause of a SELECT query is itself a function. 
+  - Third, every (sub)query evaluates within the environment created by the database names and the variables of the enclosing queries.
    Then we layer “syntactic sugar” features over the core. Commonly, syntactic sugar achieves well-known SQL syntax and semantics. Formally, every syntactic sugar feature is explained by reduction to the core. 
+   Ref.: [PartiQL Spec Section 1](https://partiql.org/assets/PartiQL-Specification.pdf#section.1).
 
 
 ### PartiQL’s Window Function Semantics
@@ -45,13 +48,13 @@ Informally:
 Each binding tuple outputted by the `WINDOWED` clause contains "information" regarding: 1) the current binding tuple from the input, 2) the partition for the current binding tuple, 3) the index for access the current binding tuple in partition.
 
 This section proceed in four steps:
-- Section [Partition As Nested Data](#Partition-As-Nested-Data) explains how to create a partition for each row/binding tuple, such partition created will be incorporated into the binding tuple produced by `WINDOWED` clause.
+- Section [Partition As Nested Data](#Partition-as-Nested-Data) explains how to create a partition for each row/binding tuple, such partition created will be incorporated into the binding tuple produced by `WINDOWED` clause.
 - Section [WINDOWED Clause](#WINDOWED-Clause) explains the core PartiQL WINDOWED structure and the binding tuples created by `WINDOWED` clause.
-- Section [Operations on Partition](#Operations-Over-Partition) explains how to perform operation over the produced partition data.
-- Section [SQL Compatibility](#SQL-Compatibility) shows that SQL's window functions can be explained over by PartiQL's `WINDOWED` clause and expressions.
+- Section [Operations on Partition](#Operations-Over-Partition) explains how to perform operations over the produced partition data.
+- Section [SQL Compatibility](#SQL-Compatibility) shows that SQL's window functions can be explained by PartiQL's `WINDOWED` clause and expressions.
 
-#### Partition As Nested Data
-In this section, we introduce a way to model partition as nested data. 
+#### Partition as Nested Data
+In this section, we introduce a way to model partition as nested data. The intention for doing so is to be able to use this nested-data in order to produce the final output of `WINDOWED` clause.
 Notice that the nested data format, although not fitting in SQL's formal semantics, provides a simple and intuitive way to understand window function results, and forms the basis for PartiQL's window semantics.
 
 In SQL, a window(and therefore the concept of partition) can be defined implicitly by an inline window specification.
@@ -78,7 +81,7 @@ LAG (expression [,offset] [,default])
 ```
 More detail about lag functions can be found in the later section([Using SQL’s inline window function in PartiQL](#Using-SQL’s-inline-window-function-in-PartiQL)). This example here is for demonstration purpose only.
 
-Notice that SQL’s `OVER` clause is more expressive, for example, it may support an additional optional `frame` sub-clause and define a peer group implicitly. In this RFC, we focus on the **partition** defined by the `OVER` clause and the following sub-clauses:
+Notice that SQL’s `OVER` clause is more expressive than what has been mentioned above; for example, it may support an additional optional `frame` sub-clause and define a peer group implicitly. In this RFC, we focus on the **partition** defined by the `OVER` clause and the following sub-clauses:
 
 **PARTITION BY**:  Partitions the input by one or more expression and turns the input into independent groups, and thereby restricts the window of a tuple. Unlike `GROUP BY`/normal aggregation, the window function does not reduce all tuples of a group into a single tuple, but only logically partitions the tuples into group. If no `PARTITION BY` is specified, the entire table is considered as belonging to the same partition.
 
@@ -137,7 +140,7 @@ The above figure shows the original table with partition for each row. Notice th
 since there is no `PARTITION BY` sub-clause, the entire table are considered as within the same partition
 and since there is no `ORDER BY` sub-clause, there is no deterministic order for the partition.
 
-We can turn the final result in the above figure in nested data format:
+We can turn the result in the above figure in a nested data format:
 ```
 <<
  -- Row 1
@@ -725,7 +728,7 @@ The `WINDOWED` clause computes the partition for each row and carry the partitio
 
 Like other clauses, the output of binding tuples from `WINDOWED` clauses becomes the input of next operator. 
 
-The scoping rules and path navigation behave as normal. 
+The scoping rules and path navigation behave as what has already been specified in the spec's sections `3.4` and `10`.
 
 Example 1.3.1: 
 
@@ -789,7 +792,7 @@ The above three queries are functionally the same.
 We can rewrite a query in SQL’s window function syntax to PartiQL syntax.
 
 Suppose that a query:
-1. Is a SELECT query
+1. Is an select-from-where (SFW) query
 2. the SELECT clause contains one or more SQL window function (identified by OVER)
 
 Then the query is rewritten using the following process:
@@ -980,25 +983,24 @@ WINDOWED
     (PARTITION BY s.ticker ORDER BY s.trade_date) 
         PARTITION AS ws_1_partition AT ws_1_pos
 
-/*
- result:       
-<< 
-<<
-  {
-    'trade_date': `2022-09-30`, 'ticker': 'AMZN',
-    'current_price': 113.00, 'previous_price': NULL
-  },
-  {
-    'trade_date': `2022-10-03`, 'ticker': 'AMZN',
-    'current_price': 115.88, 'previous_price': 113.00
-  },
-  {
-    'trade_date': `2022-09-30`, 'ticker': 'GOOG',
-    'current_price': 96.15, 'previous_price': NULL
-  }
->>
->>   
-*/     
+
+-- result:       
+-- << 
+-- <<
+--   {
+--     'trade_date': `2022-09-30`, 'ticker': 'AMZN',
+--     'current_price': 113.00, 'previous_price': NULL
+--   },
+--   {
+--     'trade_date': `2022-10-03`, 'ticker': 'AMZN',
+--     'current_price': 115.88, 'previous_price': 113.00
+--   },
+--   {
+--     'trade_date': `2022-09-30`, 'ticker': 'GOOG',
+--     'current_price': 96.15, 'previous_price': NULL
+--   }
+-- >>
+-- >>       
 ```
 
 
@@ -1053,22 +1055,21 @@ SELECT VALUE {
         PARTITION AS ws_1_partition AT ws_1_pos
             
             
-/*
- result:
-  {
-    'current_month': 9, 'ticker': 'AMZN',
-    'current_month_average': 113.00, 'previous_month_avg': NULL
-  },
-  {
-    'current_month': 10, 'ticker': 'AMZN',
-    'current_month_average': 115.88, 'previous_month_avg': 113.00
-  },
-  {
-    'current_month': 9, 'ticker': 'GOOG',
-    'current_month_average': 96.15, 'previous_month_avg': NULL
-  }
->>
-*/
+-- result:
+-- <<
+--   {
+--     'current_month': 9, 'ticker': 'AMZN',
+--     'current_month_average': 113.00, 'previous_month_avg': NULL
+--   },
+--   {
+--     'current_month': 10, 'ticker': 'AMZN',
+--     'current_month_average': 115.88, 'previous_month_avg': 113.00
+--   },
+--   {
+--     'current_month': 9, 'ticker': 'GOOG',
+--     'current_month_average': 96.15, 'previous_month_avg': NULL
+--   }
+-- >>
 ```
 
 Example 3.3: Outer Order By
@@ -1098,22 +1099,21 @@ WINDOWED
         PARTITION AS ws_1_partition AT ws_1_pos
 ORDER BY s.trade_date DESC
 
-/*
- result:
-[
-  {
-    'trade_date': `2022-10-03`, 'ticker': 'AMZN',
-    'current_price': 115.88, 'previous_price': 113.00
-  },
-  {
-    'trade_date': `2022-09-30`, 'ticker': 'AMZN',
-    'current_price': 113.00, 'previous_price': NULL
-  },
-  {
-    'trade_date': `2022-09-30`, 'ticker': 'GOOG',
-    'current_price': 96.15, 'previous_price': NULL
-  }
-]
+-- result:
+-- [
+--   {
+--     'trade_date': `2022-10-03`, 'ticker': 'AMZN',
+--     'current_price': 115.88, 'previous_price': 113.00
+--   },
+--   {
+--     'trade_date': `2022-09-30`, 'ticker': 'AMZN',
+--     'current_price': 113.00, 'previous_price': NULL
+--   },
+--   {
+--     'trade_date': `2022-09-30`, 'ticker': 'GOOG',
+--     'current_price': 96.15, 'previous_price': NULL
+--   }
+-- ]
 */
 ```
 
