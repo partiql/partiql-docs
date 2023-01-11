@@ -3,8 +3,8 @@
 ## Summary
 
 This RFC purposes the semantics for PartiQL core window clause and PartiQL syntactic sugar for using the SQL window function syntax.
-In this RFC, we introduce a PartiQL Core `WINDOWED` clause as a function that accepts a bag of binding tuples as input and uses a nested data-model — to express SQL's windowed table — to produce a bag of binding tuples as it's output.
-Next, we demonstrate how to perform operations over the produced binding tuple.
+In this RFC, we introduce a PartiQL Core `WINDOWED` clause as a function that accepts a collection of binding tuples as input and uses a nested data-model — to express SQL's windowed table — to produce a bag of binding tuples as it's output.
+Next, we demonstrate how to perform operations over the produced binding tuples.
 Finally, we show that PartiQL’s window function semantic is backward compatible to SQL.
 
 ## Motivation
@@ -17,7 +17,7 @@ This RFC purposes the semantics for **window partition** in PartiQL. Subsequent 
 
 ### Out of scope
 
-* This RFC focuses on explaining the semantics of PartiQL’s window functions. The PartiQL core syntax provided in this RFC is for guidance only and specification of actual PartiQL core syntax as opposed to SQL compatible syntax is out of the scope of this RFC.
+* This RFC focuses on explaining the semantics of PartiQL’s window functions. The PartiQL core syntax provided in this RFC is for guidance only; specification of actual PartiQL core syntax (SQL compatible syntax excluded) is out of the scope of this RFC.
 * SQL’s window implicitly defines three concepts, `PARTITION`, `FRAME`, and `PEER`. As a first step, this RFC focuses on `PARTITION` only; `FRAME` and `PEER` concepts are out of scope for now, but some preliminary work has been done to make sure the other concepts can fit into the framework in a modular fashion.
 * An exhaustive mapping between SQL’s window function and PartiQL’s expression is out of the scope. In this RFC, we only define the mapping between SQL’s `lag` function and it's corresponding PartiQL expression as an example. The mapping between other functions are skipped.
 
@@ -29,7 +29,7 @@ We assume that the readers of this RFC has basic understanding of SQL’s window
 2. Windowed Table and Window: Windowed table is as defined in SQL spec 2011, section 4.15.14. A **windowed table** is a table together with one or more windows. A **window** is a transient data structure associated
    with a table expression. A window is defined explicitly by a window definition or implicitly by an inline window specification. Implicitly defined windows have an implementation-dependent window name. A
    **window** is used to specify window partitions and window frames, which are collections of rows used in the definition of **window functions**.
-3. Partition: To distinguish between SQL's definition of window, in this RFC, the term **partition** refers to the window partition specified for each row. See [Partition As Nested Data](#Partition-As-Nested-Data) for details. 
+3. Partition: To distinguish between SQL's definition of window, in this RFC, the term **partition** refers to the window partition specified for each row. Check Appendix 7 **Partition As Nested Data** for a visual demonstration. 
 4. Equivalent Partition: Two binding tuples $b, b' \in B^{in}_{WINDOWED}$ are in the same equivalence partition if and only if every partition expression $e_i$ evaluates to equivalent values $v_i$ (when evaluated on b) and $v_i'$ (when evaluated on $b'$). 
 5. PartiQL core and PartiQL syntactic sugar: The PartiQL core is a functional programming language with composable aspects. Three aspects of the PartiQL core syntax and semantics are characteristic of its functional orientation:
   - Every (sub)query and every (sub) expression input and output PartiQL data.
@@ -48,286 +48,15 @@ Informally:
 Each binding tuple outputted by the `WINDOWED` clause contains "information" regarding: 1) the current binding tuple from the input, 2) the partition for the current binding tuple, 3) the index for access the current binding tuple in partition.
 
 This section proceed in four steps:
-- Section [Partition As Nested Data](#Partition-as-Nested-Data) explains how to create a partition for each row/binding tuple, such partition created will be incorporated into the binding tuple produced by `WINDOWED` clause.
 - Section [WINDOWED Clause](#WINDOWED-Clause) explains the core PartiQL WINDOWED structure and the binding tuples created by `WINDOWED` clause.
 - Section [Operations on Partition](#Operations-Over-Partition) explains how to perform operations over the produced partition data.
 - Section [SQL Compatibility](#SQL-Compatibility) shows that SQL's window functions can be explained by PartiQL's `WINDOWED` clause and expressions.
 
-#### Partition as Nested Data
-In this section, we introduce a way to model partition as nested data. The intention for doing so is to be able to use this nested-data in order to produce the final output of `WINDOWED` clause.
-Notice that the nested data format, although not fitting in SQL's formal semantics, provides a simple and intuitive way to understand window function results, and forms the basis for PartiQL's window semantics.
 
-In SQL, a window(and therefore the concept of partition) can be defined implicitly by an inline window specification.
-We will use SQL's syntax during the analysis here to imply the creation of partitions only. The later sections will dive into other concepts of window functions.  
-
-SQL’s in-line window function that operates without frame clause looks like:
-
-```sql
--- FRAME clause is out of the scope
-<window_function> OVER ( 
-            [PARTITION BY <partition_expression>] 
-            [ORDER BY <sort spec>] )
-```
-That is, a window function followed by a `OVER` clause.
-
-Example 1.1.1: 
-
-Lag Function Syntax
-```sql
-LAG (expression [,offset] [,default])  
-   OVER ( 
-            [PARTITION BY <partition_expression>] 
-            ORDER BY <sort spec> )
-```
-More detail about lag functions can be found in the later section([Using SQL’s inline window function in PartiQL](#Using-SQL’s-inline-window-function-in-PartiQL)). This example here is for demonstration purpose only.
-
-Notice that SQL’s `OVER` clause is more expressive than what has been mentioned above; for example, it may support an additional optional `frame` sub-clause and define a peer group implicitly. In this RFC, we focus on the **partition** defined by the `OVER` clause and the following sub-clauses:
-
-**PARTITION BY**:  Partitions the input by one or more expression and turns the input into independent groups, and thereby restricts the window of a tuple. Unlike `GROUP BY`/normal aggregation, the window function does not reduce all tuples of a group into a single tuple, but only logically partitions the tuples into group. If no `PARTITION BY` is specified, the entire table is considered as belonging to the same partition.
-
-**ORDER BY**: Orders rows within each partition. Semantically, the order by clause defines how input tuples are logically ordered during window function evaluation. Note that if no ordering is specified, the rows inside partition have no deterministic ordering.
-
-The following examples shows how we compute the partition for each row and store it via nested data.
-Notice that **list** notion is used to store the partition data regardless of the presence of ORDER BY sub-clause.
-The reason for such choice will be further explained in the next section.
-
-Consider the input data to be:
-
-```
-<<
-  {
-    'trade_date' : 2022-09-30,
-    'ticker' : 'AMZN', 
-    'price' : 113.00
-  },
-  {
-    'trade_date' : 2022-10-03,
-    'ticker' : 'AMZN', 
-    'price' : 115.88
-  },
-  {
-    'trade_date' : 2022-10-04,
-    'ticker' : 'AMZN', 
-    'price' : 121.09
-  },
-  {
-    'trade_date' : 2022-09-30,
-    'ticker' : 'GOOG', 
-    'price' : 96.15
-  },
-  {
-    'trade_date' : 2022-10-03,
-    'ticker' : 'GOOG', 
-    'price' : 99.30
-  },
-  {
-    'trade_date' : 2022-10-04,
-    'ticker' : 'GOOG', 
-    'price' : 101.04
-  }         
->>
-```
-
-Example 1.1.2:
-
-Let us consider a simple example with no `PARTITION BY` and `ORDER BY` sub-clause:
-
-`<func> OVER () -- window specification is empty`.
-
-![Example 1.1.2 Graph](./0035-partiql-window-function/Example_1_1.png)
-
-The above figure shows the original table with partition for each row. Notice that
-since there is no `PARTITION BY` sub-clause, the entire table are considered as within the same partition
-and since there is no `ORDER BY` sub-clause, there is no deterministic order for the partition.
-
-We can turn the result in the above figure in a nested data format:
-```
-<<
- -- Row 1
-  {
-    'trade_date' : 2022-09-30,
-    'ticker' : 'AMZN', 
-    'price', 113.00
-    -- partition for row 1
-    'partition' : 
-      [
-          <<
-            'trade_date' : 2022-09-30,
-            'ticker' : 'AMZN', 
-            'price' : 113.00
-          >>,
-          <<
-            'trade_date' : 2022-10-03,
-            'ticker' : 'AMZN', 
-            'price' : 115.88
-          >>,
-          <<
-            'trade_date' : 2022-10-04,
-            'ticker' : 'AMZN', 
-            'price' : 121.09
-          >>,
-          <<
-            'trade_date' : 2022-09-30,
-            'ticker' : 'GOOG', 
-            'price' : 96.15
-          >>,
-          <<
-            'trade_date' : 2022-10-03,
-            'ticker' : 'GOOG', 
-            'price' : 99.30
-          >>,
-          <<
-            'trade_date' : 2022-10-04,
-            'ticker' : 'GOOG', 
-            'price' : 101.04
-          >>   
-      ]
-  }    
-  -- rest of the data skiped
-  ...  
->>
-```
-
-Example 1.1.3:
-
-Window specification has PARTITION BY sub-clause
-
-`<func> OVER (PARTITION BY ticker) -- has partition by sub-clause`
-
-![Example 1.1.3 Graph](./0035-partiql-window-function/Example_1_2.png)
-
-Since there is a `PARTITION BY` clause, the partition is limited to all rows that have the same `ticker` value.
-
-Similarly, the result in nested data format will be:
-```
-<<
- -- Row 1
-  {
-    'trade_date' : 2022-09-30,
-    'ticker' : 'AMZN', 
-    'price', 113.00
-    -- partition for row 1
-    'partition' : 
-      [
-          <<
-            'trade_date' : 2022-09-30,
-            'ticker' : 'AMZN', 
-            'price' : 113.00
-          >>,
-          <<
-            'trade_date' : 2022-10-03,
-            'ticker' : 'AMZN', 
-            'price' : 115.88
-          >>,
-          <<
-            'trade_date' : 2022-10-04,
-            'ticker' : 'AMZN', 
-            'price' : 121.09
-          >>
-      ]
-  }    
-  -- rest of the data skiped
-  ...  
->>
-```
-Example 1.1.4:
-
-Window specification has ORDER BY sub-clause
-
-`<func> OVER (ORDER BY price) -- has ORDER BY sub-clause`
-
-![Example 1.1.4 Graph](./0035-partiql-window-function/Example_1_3.png)
-
-```
-<<
- -- Row 1
-  {
-    'trade_date' : 2022-09-30,
-    'ticker' : 'AMZN', 
-    'price', 113.00
-    -- partition for row 1
-    'partition' : 
-      [
-          <<
-            'trade_date' : 2022-09-30,
-            'ticker' : 'GOOG', 
-            'price' : 96.15
-          >>,
-          <<
-            'trade_date' : 2022-10-03,
-            'ticker' : 'GOOG', 
-            'price' : 99.30
-          >>,
-          <<
-            'trade_date' : 2022-10-04,
-            'ticker' : 'GOOG', 
-            'price' : 101.04
-          >>,
-          <<
-            'trade_date' : 2022-09-30,
-            'ticker' : 'AMZN', 
-            'price' : 113.00
-          >>,
-          <<
-            'trade_date' : 2022-10-03,
-            'ticker' : 'AMZN', 
-            'price' : 115.88
-          >>,
-          <<
-            'trade_date' : 2022-10-04,
-            'ticker' : 'AMZN', 
-            'price' : 121.09
-          >>
-      ]
-  }    
-  -- rest of the data skiped
-  ...  
->>
-```
-
-Example 1.1.5:
-
-Window specification has both PARTITION BY AND ORDER BY sub-clause
-
-Notice that to demonstrate the difference visually, the result will be sorted in descending order.
-
-`<func> OVER (PARTITION BY ticker ORDER BY price DESC)  -- has PARTITION BY and ORDER BY sub-clause`
-
-![Example 1.1.5 Graph](./0035-partiql-window-function/Example_1_4.png)
-
-```
-<<
- -- Row 1
-  {
-    'trade_date' : 2022-09-30,
-    'ticker' : 'AMZN', 
-    'price', 113.00
-    -- partition for row 1
-    'partition' : 
-      [
-          <<
-            'trade_date' : 2022-10-04,
-            'ticker' : 'AMZN', 
-            'price' : 121.09
-          >>,
-          <<
-            'trade_date' : 2022-10-03,
-            'ticker' : 'AMZN', 
-            'price' : 115.88
-          >>,
-          <<
-            'trade_date' : 2022-09-30,
-            'ticker' : 'AMZN', 
-            'price' : 113.00
-          >>
-      ]
-  }
-  -- rest of the data skiped
-  ...  
->>
-```
 
 #### WINDOWED Clause 
+
+The `WINDOWED` clause can be viewed as a modular function, with $B^{in}_{WINDOWED}$ (a bag of binding tuples) as an input parameter to the function.
 
 ```sql
 WINDOWED (
@@ -340,10 +69,7 @@ WINDOWED (
 
 Where $e_1,...,e_n$ is a list of **partition expressions**, $o_1,....,o_n$ is a list of **ordering expressions**, $p$ is the **partition variable**, and $pos$ is the **position variable** which indicates the position of the current row in the partition.
 
-The `WINDOWED` clause can be viewed as a modular function, with $B^{in}_{WINDOWED}$ (a bag of binding tuples) as an input parameter to the function.
-
-
-1. PARTITION BY sub-clause:
+1. PARTITION BY sub-clause(Visual examples on partition are provided in Appendix 7):
 
 * If PARTITION BY is presented: $B^{in}_{WINDOWED}$ is partitioned into the minimal number of equivalence partition $B_1,...,B_n$. The equivalence rule is the same as the one used in `GROUP BY` clause (Appendix 2). 
 * If there is no `PARTITION BY`, the entire input binding collection is considered as one partition.
@@ -377,7 +103,7 @@ Suppose  $B^{in}_{WINDOWED}$ is:
 >>
 ```
 
-Example 1.2.1: Window specification without `PARTITION BY` AND `ORDER BY`
+Example 1.1: Window specification without `PARTITION BY` AND `ORDER BY`
 
 ```sql
 WINDOWED () PARTITION AS p AT pos
@@ -417,9 +143,11 @@ The output binding collection is:
 >>
 ```
 
-Remarks: If `ORDER BY` is not present, the order of partition variable `p` is arbitrary.
+**Remarks:**
 
-Example 1.2.2: Window specification with `PARTITION BY` only
+If `PARTITION BY` is not present, partition variable `p` contains the entire input binding tuples.
+
+Example 1.2: Window specification with `PARTITION BY` only
 
 ```sql
 WINDOWED (PARTITION BY stock.ticker) PARTITION AS p AT pos
@@ -455,9 +183,11 @@ The output binding collection is:
 >>
 ```
 
-Remark: Notice that the partition produced is a list, but the order of the elements in the produced partition list is arbitrary.
+**Remark:**
 
-Example 1.2.3: Window specification with `ORDER BY` only
+Notice that the partition variable `p` is a list, but the order of the elements in `p` is nondeterministic.
+
+Example 1.3.1: Window specification with `ORDER BY` only
 
 ```sql
 WINDOWED (ORDER BY stock.price) PARTITION AS p AT pos
@@ -497,15 +227,15 @@ The output binding collection is:
 >>
 ```
 
-Remark: Notice that the partition produced is a list, and the order of the elements in the produced partition list are deterministic, yet the output binding tuple $B^{OUT}_{WINDOWED}$ is still a bag. This is because the `ORDER BY` sub-clause within the window specification does not necessarily affect the output binding tuple ordering.
+**Remark:**
+Notice that the partition variable `p` is a list, and the order of the elements in the produced partition list are deterministic (unless the data set contains equivalence sort key, see Example 1.3.2), 
+yet the output binding tuple $B^{OUT}_{WINDOWED}$ is still a bag. 
+This is because the `ORDER BY` sub-clause within the window specification does not necessarily affect the output binding tuple ordering.
 
-Example 1.2.4: Window specification with `PARTITION BY` and `ORDER BY` sub-clause:
-
+Example 1.3.2: Identical sort key: 
 ```sql
-WINDOWED (PARTITION BY stock.ticker ORDER BY stock.price DESC) 
-    PARTITION AS p AT pos
+WINDOWED (ORDER BY stock.trade_date) PARTITION AS p AT pos
 ```
-
 The output binding collection is:
 
 ```
@@ -513,18 +243,59 @@ The output binding collection is:
    <
     stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00},
     p : [
-          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>,
-          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15}>,
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
         ],
-    pos: 1
+    pos: 0
    >,
    <
     stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88},
     p : [
-          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>,
-          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15}>,
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
+        ],
+    pos: 2
+   >,
+   <
+    stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15},
+    p : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15}>
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
+        ],
+    pos: 1
+   > 
+>>
+```
+**Remark:**
+
+Notice here we have two binding tuples whose `trade_date` attribute is `2022-09-30`. In that case, the relative order of the elements with identical sort key in the produced partition variable `p` can be nondeterministic, depending on the sorting algorithm implemented.
+
+Example 1.4: Window specification with `PARTITION BY` and `ORDER BY` sub-clause:
+
+```sql
+WINDOWED (PARTITION BY stock.ticker ORDER BY stock.trade_date) 
+    PARTITION AS p AT pos
+```
+```
+<<
+   <
+    stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00},
+    p : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
         ],
     pos: 0
+   >,
+   <
+    stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88},
+    p : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
+        ],
+    pos: 1
    >,
    <
     stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15},
@@ -535,8 +306,13 @@ The output binding collection is:
    > 
 >>
 ```
+**Remark:** 
 
-Example 1.2.5: Interaction with GROUP BY:
+Notice that the produced binding collection appears to be identical to the one produced in Example 1.2 (Window specification with `PARTITION BY` only). 
+However, recall that the order of the elements in the produced partition variable `p` is nondeterministic in Example 1.2, 
+while the order of the elements in partition variable `p` is deterministic in this example.
+
+Example 1.5: Interaction with GROUP BY:
 
 ```
 GROUP BY EXTRACT(MONTH FROM trade_date) as month, ticker GROUP AS g
@@ -650,10 +426,7 @@ Next, consider the output binding collection FROM WINDOWED clause:
 >>
 ```
 
-
-Example 1.2.6: Data set with NULL and MISSING: 
-
-Recall that the equivalence function will treat the **NULL** and the **MISSING** expression as the same: 
+Example 1.6: Data set with NULL and MISSING:
 
 Suppose  $B^{in}_{WINDOWED}$ is:
 
@@ -670,6 +443,10 @@ Suppose  $B^{in}_{WINDOWED}$ is:
 ```sql
 WINDOWED (PARTITION BY stock.ticker) PARTITION AS p AT pos
 ```
+
+Recall that the equivalence function will treat the **NULL** and the **MISSING** expression as the same: 
+Notice that both the 3rd, 4th and 5th tuples of logs will be partitioned under the same partition, despite the ticker of
+the 3rd being `NULL`, the ticker of the 4th and the 5th being `MISSING`.
 
 The output binding collection is:
 
@@ -721,6 +498,46 @@ The output binding collection is:
 >>
 ```
 
+Example 1.7: Duplicated tuples:
+
+Suppose  $B^{in}_{WINDOWED}$ contains identical binding tuples:
+
+```
+<<
+    <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+    <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>
+>>
+```
+
+```sql
+WINDOWED (ORDER BY stock.trade_date) PARTITION AS p AT pos
+```
+The output binding collection is:
+
+```
+<<
+   <
+    stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00},
+    p : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>
+        ],
+    pos: 0
+   >,
+   <
+    stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00},
+    p : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>
+        ],
+    pos: 1
+   >
+>>
+```
+**Remark:** 
+
+The position variable `pos` MUST be unique for each binding tuple.
+
 
 #### Operations Over Partition
 
@@ -730,7 +547,7 @@ Like other clauses, the output of binding tuples from `WINDOWED` clauses becomes
 
 The scoping rules and path navigation behave as what has already been specified in the spec's sections `3.4` and `10`.
 
-Example 1.3.1: 
+Example 2.1: 
 
 Consider if we would like to retrieve the current price and the previous price of a given stock, and if there is no previous data, we want to return null.
 ```sql
@@ -747,7 +564,7 @@ WINDOWED (
     ) PARTITION AS p AT pos
 ```
 
-Note that the casting to list is necessary because SELECT VALUE wraps the result in a bag. 
+Note that the casting to list is necessary because `SELECT VALUE` wraps the result in a bag. See example 4.1 for a more detailed walk through. 
 
 #### SQL Compatibility
 
@@ -756,36 +573,36 @@ For SQL compatibility, PartiQL allows use of SQL syntax directly.
 SQL allows three ways to specify window:
 1) inline window specification:
 
-Example 1.4.1: 
+Example 3.1: 
 ```sql
 SELECT 
     rank() OVER (PARTITION BY ticker), -- inline window specification
-    lag(price) OVER (PARTITION BY ticker ORDER BY date)
+    lag(price) OVER (PARTITION BY ticker ORDER BY trade_date)
 FROM stock as s
 ```
 
 2) window clause
 
-Example 1.4.2:
+Example 3.2:
 ```sql
 SELECT 
     rank() OVER w1,
     lag(price) OVER w2
 FROM stock as s
 WINDOW w1 AS (PARTITION BY ticker) -- window clause
-       w2 AS (PARTITION BY ticker ORDER BY date) -- window clause
+       w2 AS (PARTITION BY ticker ORDER BY trade_date) -- window clause
 ```
 
 3) reuse window definition
 
-Example 1.4.3:
+Example 3.3:
 ```sql
 SELECT
     rank() OVER w1,
     lag(price) OVER w2
 FROM stock as s
 WINDOW w1 AS (PARTITION BY ticker)
-       w2 AS (w1 ORDER BY date) -- reuse window definition
+       w2 AS (w1 ORDER BY trade_date) -- reuse window definition
 ```
 The above three queries are functionally the same.
 
@@ -807,7 +624,7 @@ Then the query is rewritten using the following process:
 
 For each SQL window function $wf$, an implementation MAY offer a corresponding core PartiQL expression $wf'$. For example, the mapping relationship for SQL’s `LAG` function is
 
-Example 1.4.4: An example mapping for LAG function
+Example 3.4: An example mapping for LAG function
 
 ```sql
  LAG(${expr}, ${offset}, ${default}) OVER (...) 
@@ -817,12 +634,13 @@ Example 1.4.4: An example mapping for LAG function
        -- rest of clauses i.e, FROM, WINDOWED, etc are skipped.      
 ```
 
+Notice that SQL’s `OVER` clause and `WINDOW` clause are more expressive than what has been mentioned above; for example, it may support an additional optional `frame` sub-clause and define a peer group implicitly. In this RFC, we focus on the **partition** defined by the `OVER` clause and `PARTITION BY` and `ORDER BY` sub-clauses. 
 
-The PartiQL expression $wf'_i$ and the core PartiQL `WINDOWED` Clause, together explains the semantics of SQL's window function. Nevertheless, it is possible that an implementation offer only the SQL style window function without implementing the `WINDOWED` clause and defining a mapping relationship.
+The PartiQL expression $wf'_i$ and the core PartiQL `WINDOWED` Clause, together can explain the semantics of SQL's window function. Nevertheless, it is possible that an implementation offer only the SQL style window function without implementing the `WINDOWED` clause and defining a mapping relationship.
 
 The rewriting approach provided by this RFC creates a one-to-one mapping between a window function and the window specification. E.g. if there are two window functions in a query there will be two corresponding representation of the function in logical plan as WINDOWED clauses. An implementation MAY choose to optimize the physical execution by concatenating the resulting `WINDOWED` clauses.
 
-Example 1.4.5: One-to-one mapping between window function and window specification
+Example 3.5: One-to-one mapping between window function and window specification
 
 ```sql
 SELECT 
@@ -842,9 +660,9 @@ SELECT VALUE
                   ELSE NULL END
 FROM stock as s
 WINDOWED
-    (PARTITION BY l.ticker ORDER BY l.trade_time) 
+    (PARTITION BY l.ticker ORDER BY l.trade_date) 
         PARTITION AS ws_1_partition AT ws_1_pos
-    (PARTITION BY l.ticker ORDER BY l.trade_time)
+    (PARTITION BY l.ticker ORDER BY l.trade_date)
         PARTITION AS ws_2_partition AT ws_2_pos
 ```
 
@@ -924,7 +742,7 @@ Reusing the previous example:
 >>
 ```
 
-Example 3.1 : 
+Example 4.1 : 
 
 For each ticker, find the price for each day and the previous day
 
@@ -967,9 +785,12 @@ SELECT s.trade_date as trade_date,
        s.price as current_price,
        lag(s.price) OVER (PARTITION BY s.ticker ORDER BY s.trade_date) as previous_price
     FROM stock as s
+```
 
+Such query can be rewritten in PartiQL Core as: 
+```sql
 -- Equivalent PartiQL Core query
--- See Example 1.2.4 for the Binding Tuples created by WINDOWED clause 
+-- See Example 1.4 for the Binding Tuples created by WINDOWED clause 
 SELECT value {
     'date' : s.trade_date,
     'ticker' : s.ticker,
@@ -982,8 +803,57 @@ FROM stock as s
 WINDOWED
     (PARTITION BY s.ticker ORDER BY s.trade_date) 
         PARTITION AS ws_1_partition AT ws_1_pos
+```
+The `WINDOWED` clause outputs the collection of binding tuples(See Example 1.4), which is consumed by the SELECT clause:
+$$ B^{out}_{WINDOWED} = B^{in}_{SELECT} = $$
+```
+<<
+   <
+    stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00},
+    ws_1_partition : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
+        ],
+    ws_1_pos: 0
+   >,
+   <
+    stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88},
+    ws_1_partition : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
+        ],
+    ws_1_pos: 1
+   >,
+   <
+    stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15},
+    ws_1_partition : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15}>
+        ],
+    ws_1_pos: 0
+   > 
+>>
+```
 
+For the first tuple, $ws_1_pos - 1 = -1$ therefore the `previous_price` will be null. 
+For the second tuple, $ws_1_pos - 1 = 0$, we evaluate the expression `CAST (SELECT VALUE s.price FROM ws_1_partition AT idx WHERE idx = ws_1_pos - 1 AS LIST)[0]`.
+$$ B^{out}_{FROM} = B^{in}_{WHERE} = $$
+```
+<<
+    <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}, idx: 0>,
+    <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}, idx: 1>
+>>
+```
+Notice here the `FROM` clause outputs a bag instead of a list. (See Spec section 5.1 Ranging Over Bags and Arrays)
 
+$$ B^{out}_{WHERE} = B^{in}_{SELECT} = $$
+```
+<<
+    <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}, idx: 0>,
+>>
+```
+The sub-query outputs `<< 113.00 >>`, to retrieve the value, we cast the bag to a list and extract the first item in the produced list. 
+
+```
 -- result:       
 -- << 
 -- <<
@@ -1036,7 +906,7 @@ SELECT VALUE {
 
 
 -- step 2: rewrite window
--- See Example 1.2.5 for the Binding Tuples created by WINDOWED clause
+-- See Example 1.5 for the Binding Tuples created by WINDOWED clause
 SELECT VALUE {
     'current_month' : month, 
     'ticker' : ticker, 
@@ -1084,7 +954,7 @@ FROM stock as s
 ORDER BY s.trade_date DESC
 
 -- Equivalent PartiQL Core query
--- See Example 1.2.4 for the Binding Tuples created by WINDOWED clause 
+-- See Example 1.4 for the Binding Tuples created by WINDOWED clause 
 SELECT value {
     'date' : s.trade_date,
     'ticker' : s.ticker,
@@ -1114,7 +984,6 @@ ORDER BY s.trade_date DESC
 --     'current_price': 96.15, 'previous_price': NULL
 --   }
 -- ]
-*/
 ```
 
 Notice here the output is a list, whereas the results in previous query return a bag. This is because the ORDER BY sub-clause only order the partition.
@@ -1133,6 +1002,7 @@ SELECT
 FROM stock as s
 
 -- Equivalent PartiQL Core query
+-- See Example 1.6 for the Binding Tuples created by WINDOWED clause 
 SELECT value {
     'previous_a': 
         CASE WHEN ws_1_pos - 1 >= 0 THEN
@@ -1182,12 +1052,250 @@ The second row returns an empty struct `{}` , this is because the current row is
 | dense_rank()           | Partition	 | rank of the current row without gaps        | 	                        | shall be present     | shall not be present	 |
 | row_number()           | Partition	 | row number of the current rows              | 	                        | 	                    | shall not be present	 |
 | ntile()                | Partition	 | distribute. evenly over buckets             | 	                        | shall be present     | shall not be present	 |
-| precent_rank()         | Parititon	 | relative rank of the current row            | 	                        | 	                    | shall not be present	 |
+| precent_rank()         | Partition	 | relative rank of the current row            | 	                        | 	                    | shall not be present	 |
 | cume_dist()            | Partition	 | relative rank of the peer group             | 	                        | 	                    | shall not be present	 |
 | agg_func(DISTINCT ...) | Partition	 | compute distinct aggregate over partition   | 	                        | 	                    | shall not be present	 |
 | agg_func(ALL ...)      | Frame	     | compute aggregate over frame                | 	                        | 	                    | 	                     |
 
+7. Partition as Nested Data
+In this RFC, we introduce a way to model partition as nested data and have used the produced nested-data in the final output of `WINDOWED` clause.
+We will provide some additional examples on how we compute the partition for each row and store it via nested data. 
 
+Consider the input data to be:
+
+```
+<<
+  {
+    'trade_date' : 2022-09-30,
+    'ticker' : 'AMZN', 
+    'price' : 113.00
+  },
+  {
+    'trade_date' : 2022-10-03,
+    'ticker' : 'AMZN', 
+    'price' : 115.88
+  },
+  {
+    'trade_date' : 2022-10-04,
+    'ticker' : 'AMZN', 
+    'price' : 121.09
+  },
+  {
+    'trade_date' : 2022-09-30,
+    'ticker' : 'GOOG', 
+    'price' : 96.15
+  },
+  {
+    'trade_date' : 2022-10-03,
+    'ticker' : 'GOOG', 
+    'price' : 99.30
+  },
+  {
+    'trade_date' : 2022-10-04,
+    'ticker' : 'GOOG', 
+    'price' : 101.04
+  }         
+>>
+```
+
+Example 1:
+
+Let us consider a simple example with no `PARTITION BY` and `ORDER BY` sub-clause:
+
+`<func> OVER () -- window specification is empty`.
+
+![Example 1.1.2 Graph](./0035-partiql-window-function/Example_1_1.png)
+
+The above figure shows the original table with partition for each row. Notice that
+since there is no `PARTITION BY` sub-clause, the entire table are considered as within the same partition
+and since there is no `ORDER BY` sub-clause, there is no deterministic order for the partition.
+
+We can turn the result in the above figure in a nested data format:
+```
+<<
+ -- Row 1
+  {
+    'trade_date' : 2022-09-30,
+    'ticker' : 'AMZN', 
+    'price', 113.00
+    -- partition for row 1
+    'partition' : 
+      [
+          <<
+            'trade_date' : 2022-09-30,
+            'ticker' : 'AMZN', 
+            'price' : 113.00
+          >>,
+          <<
+            'trade_date' : 2022-10-03,
+            'ticker' : 'AMZN', 
+            'price' : 115.88
+          >>,
+          <<
+            'trade_date' : 2022-10-04,
+            'ticker' : 'AMZN', 
+            'price' : 121.09
+          >>,
+          <<
+            'trade_date' : 2022-09-30,
+            'ticker' : 'GOOG', 
+            'price' : 96.15
+          >>,
+          <<
+            'trade_date' : 2022-10-03,
+            'ticker' : 'GOOG', 
+            'price' : 99.30
+          >>,
+          <<
+            'trade_date' : 2022-10-04,
+            'ticker' : 'GOOG', 
+            'price' : 101.04
+          >>   
+      ]
+  }    
+  -- rest of the data skiped
+  ...  
+>>
+```
+
+Example 2:
+
+Window specification has PARTITION BY sub-clause
+
+`<func> OVER (PARTITION BY ticker) -- has partition by sub-clause`
+
+![Example 1.1.3 Graph](./0035-partiql-window-function/Example_1_2.png)
+
+Since there is a `PARTITION BY` clause, the partition is limited to all rows that have the same `ticker` value.
+
+Similarly, the result in nested data format will be:
+```
+<<
+ -- Row 1
+  {
+    'trade_date' : 2022-09-30,
+    'ticker' : 'AMZN', 
+    'price', 113.00
+    -- partition for row 1
+    'partition' : 
+      [
+          <<
+            'trade_date' : 2022-09-30,
+            'ticker' : 'AMZN', 
+            'price' : 113.00
+          >>,
+          <<
+            'trade_date' : 2022-10-03,
+            'ticker' : 'AMZN', 
+            'price' : 115.88
+          >>,
+          <<
+            'trade_date' : 2022-10-04,
+            'ticker' : 'AMZN', 
+            'price' : 121.09
+          >>
+      ]
+  }    
+  -- rest of the data skiped
+  ...  
+>>
+```
+Example 3:
+
+Window specification has ORDER BY sub-clause
+
+`<func> OVER (ORDER BY price) -- has ORDER BY sub-clause`
+
+![Example 1.1.4 Graph](./0035-partiql-window-function/Example_1_3.png)
+
+```
+<<
+ -- Row 1
+  {
+    'trade_date' : 2022-09-30,
+    'ticker' : 'AMZN', 
+    'price', 113.00
+    -- partition for row 1
+    'partition' : 
+      [
+          <<
+            'trade_date' : 2022-09-30,
+            'ticker' : 'GOOG', 
+            'price' : 96.15
+          >>,
+          <<
+            'trade_date' : 2022-10-03,
+            'ticker' : 'GOOG', 
+            'price' : 99.30
+          >>,
+          <<
+            'trade_date' : 2022-10-04,
+            'ticker' : 'GOOG', 
+            'price' : 101.04
+          >>,
+          <<
+            'trade_date' : 2022-09-30,
+            'ticker' : 'AMZN', 
+            'price' : 113.00
+          >>,
+          <<
+            'trade_date' : 2022-10-03,
+            'ticker' : 'AMZN', 
+            'price' : 115.88
+          >>,
+          <<
+            'trade_date' : 2022-10-04,
+            'ticker' : 'AMZN', 
+            'price' : 121.09
+          >>
+      ]
+  }    
+  -- rest of the data skiped
+  ...  
+>>
+```
+
+Example 4:
+
+Window specification has both PARTITION BY AND ORDER BY sub-clause
+
+Notice that to demonstrate the difference visually, the result will be sorted in descending order.
+
+`<func> OVER (PARTITION BY ticker ORDER BY price DESC)  -- has PARTITION BY and ORDER BY sub-clause`
+
+![Example 1.1.5 Graph](./0035-partiql-window-function/Example_1_4.png)
+
+```
+<<
+ -- Row 1
+  {
+    'trade_date' : 2022-09-30,
+    'ticker' : 'AMZN', 
+    'price', 113.00
+    -- partition for row 1
+    'partition' : 
+      [
+          <<
+            'trade_date' : 2022-10-04,
+            'ticker' : 'AMZN', 
+            'price' : 121.09
+          >>,
+          <<
+            'trade_date' : 2022-10-03,
+            'ticker' : 'AMZN', 
+            'price' : 115.88
+          >>,
+          <<
+            'trade_date' : 2022-09-30,
+            'ticker' : 'AMZN', 
+            'price' : 113.00
+          >>
+      ]
+  }
+  -- rest of the data skiped
+  ...  
+>>
+```
 
 
 
