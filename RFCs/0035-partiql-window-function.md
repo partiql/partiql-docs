@@ -804,11 +804,11 @@ WINDOWED
     (PARTITION BY s.ticker ORDER BY s.trade_date) 
         PARTITION AS ws_1_partition AT ws_1_pos
 ```
-The `WINDOWED` clause outputs the collection of binding tuples(See Example 1.4), which is consumed by the SELECT clause:
+The `WINDOWED` clause outputs a collection of binding tuples(See Example 1.4), which is consumed by the SELECT clause:
 
-$B^{OUT}_{WINDOWED}$ 
+$B^{OUT}_{WINDOWED}$
 
-= $B^{in}_{SELECT}$ 
+= $B^{in}_{SELECT}$
 
 =
 
@@ -856,9 +856,9 @@ $B^{out}_{FROM}$
 ```
 Notice here the `FROM` clause outputs a bag instead of a list. (See Spec section 5.1 Ranging Over Bags and Arrays)
 
-$B^{out}_{WHERE}$ 
+$B^{out}_{WHERE}$
 
-= $B^{in}_{SELECT}$ 
+= $B^{in}_{SELECT}$
 
 =
 ```
