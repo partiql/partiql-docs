@@ -806,7 +806,11 @@ WINDOWED
 ```
 The `WINDOWED` clause outputs the collection of binding tuples(See Example 1.4), which is consumed by the SELECT clause:
 
-$B^{OUT}_{WINDOWED}$ = $B^{in}_{SELECT}$ =
+$B^{OUT}_{WINDOWED}$ 
+
+= $B^{in}_{SELECT}$ 
+
+=
 
 ```
 <<
@@ -839,8 +843,11 @@ $B^{OUT}_{WINDOWED}$ = $B^{in}_{SELECT}$ =
 For the first tuple, `ws_1_pos - 1 = -1` therefore the `previous_price` will be null. 
 For the second tuple, `ws_1_pos - 1 = 0`, we evaluate the expression `CAST (SELECT VALUE s.price FROM ws_1_partition AT idx WHERE idx = ws_1_pos - 1 AS LIST)[0]`.
 
-$B^{out}_{FROM}=B^{in}_{WHERE}=$
+$B^{out}_{FROM}$
 
+= $B^{in}_{WHERE}$
+
+= 
 ```
 <<
     <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}, idx: 0>,
@@ -849,8 +856,11 @@ $B^{out}_{FROM}=B^{in}_{WHERE}=$
 ```
 Notice here the `FROM` clause outputs a bag instead of a list. (See Spec section 5.1 Ranging Over Bags and Arrays)
 
-$B^{out}_{WHERE}$ = $B^{in}_{SELECT}$ =
+$B^{out}_{WHERE}$ 
 
+= $B^{in}_{SELECT}$ 
+
+=
 ```
 <<
     <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}, idx: 0>,
