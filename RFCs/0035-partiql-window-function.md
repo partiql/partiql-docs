@@ -445,7 +445,7 @@ WINDOWED (PARTITION BY stock.ticker) PARTITION AS p AT pos
 ```
 
 Recall that the equivalence function will treat the **NULL** and the **MISSING** expression as the same: 
-Notice that both the 3rd, 4th and 5th tuples of logs will be partitioned under the same partition, despite the ticker of
+Notice that both the 3rd, 4th and 5th tuples will be partitioned under the same partition, despite the ticker of
 the 3rd being `NULL`, the ticker of the 4th and the 5th being `MISSING`.
 
 The output binding collection is:
@@ -638,7 +638,7 @@ Notice that SQL’s `OVER` clause and `WINDOW` clause are more expressive than w
 
 The PartiQL expression $wf'_i$ and the core PartiQL `WINDOWED` Clause, together can explain the semantics of SQL's window function. Nevertheless, it is possible that an implementation offer only the SQL style window function without implementing the `WINDOWED` clause and defining a mapping relationship.
 
-The rewriting approach provided by this RFC creates a one-to-one mapping between a window function and the window specification. E.g. if there are two window functions in a query there will be two corresponding representation of the function in logical plan as WINDOWED clauses. An implementation MAY choose to optimize the physical execution by concatenating the resulting `WINDOWED` clauses.
+The rewriting approach provided by this RFC creates a one-to-one mapping between a window function and the window specification. E.g. if there are two window functions in a query there will be two corresponding representations of the functions in logical plan as `WINDOWED` clauses. An implementation MAY choose to optimize the physical execution by concatenating the resulting `WINDOWED` clauses.
 
 Example 3.5: One-to-one mapping between window function and window specification
 
@@ -856,6 +856,7 @@ B<sup>OUT</sup><sub>WHERE</sub> = B<sup>IN</sup><sub>SELECT</sub>  =
 ```
 The sub-query outputs `<< 113.00 >>`, to retrieve the value, we cast the bag to a list and extract the first item in the produced list. 
 
+The final result is :
 ```sql
 -- result:       
 -- <<
@@ -1059,7 +1060,8 @@ The second row returns an empty struct `{}` , this is because the current row is
 
 7. Partition as Nested Data
 In this RFC, we introduce a way to model partition as nested data and have used the produced nested-data in the final output of `WINDOWED` clause.
-We will provide some additional examples on how we compute the partition for each row and store it via nested data. 
+Here we will provide some additional examples on computing the partition for each row and storing it via nested data. 
+Some visual demonstrations are also offered here to help conceptualize partition, but should be considered informal and other concepts such as position variable will not be mentioned here.  
 
 Consider the input data to be:
 
