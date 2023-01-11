@@ -856,9 +856,8 @@ B<sup>OUT</sup><sub>WHERE</sub> = B<sup>IN</sup><sub>SELECT</sub>  =
 ```
 The sub-query outputs `<< 113.00 >>`, to retrieve the value, we cast the bag to a list and extract the first item in the produced list. 
 
-```
+```sql
 -- result:       
--- << 
 -- <<
 --   {
 --     'trade_date': `2022-09-30`, 'ticker': 'AMZN',
@@ -872,8 +871,7 @@ The sub-query outputs `<< 113.00 >>`, to retrieve the value, we cast the bag to 
 --     'trade_date': `2022-09-30`, 'ticker': 'GOOG',
 --     'current_price': 96.15, 'previous_price': NULL
 --   }
--- >>
--- >>       
+-- >>     
 ```
 
 
@@ -1005,7 +1003,6 @@ SELECT
 FROM stock as s
 
 -- Equivalent PartiQL Core query
--- See Example 1.6 for the Binding Tuples created by WINDOWED clause 
 SELECT value {
     'previous_a': 
         CASE WHEN ws_1_pos - 1 >= 0 THEN
@@ -1018,14 +1015,14 @@ WINDOWED
         PARTITION AS ws_1_partition AT ws_1_pos
 
 -- result
-<<
-  {
-    'previous_a': 'Out Of Partition'
-  },
-  {},
-  {
-    'previous_a': 'Out Of Partition'
-  }
+-- <<
+--  {
+--    'previous_a': 'Out Of Partition'
+--  },
+--  {},
+--  {
+--    'previous_a': 'Out Of Partition'
+--  }
 >>
 ```
 
