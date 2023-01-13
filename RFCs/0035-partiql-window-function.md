@@ -45,7 +45,7 @@ In the following section, we first define the semantics for `WINDOWED` clause in
 The PartiQL `WINDOWED` clause can be thought of as a standalone operator that inputs a collection of binding tuples and outputs a collection of binding tuples.
 
 Informally:
-Each binding tuple outputted by the `WINDOWED` clause contains "information" regarding: 1) the current binding tuple from the input, 2) the partition for the current binding tuple, 3) the index for access the current binding tuple in partition.
+Each binding tuple outputted by the `WINDOWED` clause contains "information" regarding: 1) the corresponding binding tuple from the input, 2) the partition for the binding tuple, 3) the index for access the binding tuple in partition.
 
 This section proceed in four steps:
 - Section [WINDOWED Clause](#WINDOWED-Clause) explains the core PartiQL WINDOWED structure and the binding tuples created by `WINDOWED` clause.
@@ -67,11 +67,13 @@ WINDOWED (
     ) PARTITION AS p AT pos
 ```
 
-Where $e_1,...,e_n$ is a list of **partition expressions**, $o_1,....,o_n$ is a list of **ordering expressions**, $p$ is the **partition variable**, and $pos$ is the **position variable** which indicates the position of the current row in the partition.
+Where $e_1,...,e_n$ is a list of **partition expressions**, $o_1,....,o_n$ is a list of **ordering expressions**, $p$ is the **partition variable**, and $pos$ is the **position variable** which indicates the position of the current row in the partition — the position variable `pos` MUST be unique for each binding tuple.
 
 1. PARTITION BY sub-clause(Visual examples on partition are provided in Appendix 7):
 
-* If PARTITION BY is presented: $B^{in}_{WINDOWED}$ is partitioned into the minimal number of equivalence partition $B_1,...,B_n$. The equivalence rule is the same as the one used in `GROUP BY` clause (Appendix 2). 
+* If PARTITION BY is presented: $B^{in}_{WINDOWED}$ is partitioned into the minimal number of equivalence partition $B_1,...,B_n$. For two binding tuples $b, b' \in B^{in}_{WINDOWED}$ are in the same equivalence partition if and only if every partition expression $e_i$ evaluates to equivalent values $v_i$ (when evaluated on b) and $v_i'$ (when evaluated on $b'$).
+
+The equivalence rule is the same as the one used in `GROUP BY` clause (Appendix 2). 
 * If there is no `PARTITION BY`, the entire input binding collection is considered as one partition.
 * Each of the $B_i$ produced by `PARTITION BY` SHALL be a list instead of a bag, even though the order is non-deterministic at the moment. The partition needs to be a list because we want to use the index to locate the original row.
 
@@ -82,7 +84,7 @@ Where $e_1,...,e_n$ is a list of **partition expressions**, $o_1,....,o_n$ is a 
 
 3. WINDOWED clause output:
 
-* For each binding tuple $b_i$ in $B^{in}_{WINDOWED}$, output $b = b_i || < p : B_i, pos: x>$ where $b_i$ in $B_i$ and $p[x] = b_i$.
+* For each binding tuple $b_i$ in $B^{in}_{WINDOWED}$, output $b = b_i || < p : B_i, pos: x>$ where `< p : B_i, pos: x>` is a binding tuple, $b_i$ in $B_i$, and $p[x] = b_i$.
 * Notice that in case of duplication, the pos is nondeterministic but **MUST** be guaranteed to be unique.
 
 Logically, `WINDOWED` clause is evaluated after `GROUP BY` and `HAVING` and before `ORDER BY`, the evaluation order looks like:
@@ -350,7 +352,7 @@ First, consider the output binding collection from GROUP BY:
 >>
 ```
 
-Next, consider the output binding collection FROM WINDOWED clause: 
+Next, consider the output binding collection from WINDOWED clause: 
 ```
 <<
   <
@@ -541,7 +543,7 @@ The position variable `pos` MUST be unique for each binding tuple.
 
 #### Operations Over Partition
 
-The `WINDOWED` clause computes the partition for each row and carry the partition in the input binding tuples. 
+The `WINDOWED` clause computes the partition for each row and makes the partition available in its output using partition variable `p` with position variable `pos`. These variables can then get accessed by the next clause (as next clause's input) to perform further operations. The scoping rules and path navigation behave as what has already been specified in the spec's sections `3.4` and `10`. Example 2.1 shows an example of this.
 
 Like other clauses, the output of binding tuples from `WINDOWED` clauses becomes the input of next operator. 
 
@@ -668,7 +670,7 @@ WINDOWED
 
 ### Using SQL’s inline window function in PartiQL
 
-For completeness, we show how to use SQL’s `LAG` and `LEAD` window function in PartiQL.
+For completeness, we show how to use SQL’s `LAG` and `LEAD` window functions in PartiQL.
 
 Supported grammar:
 
@@ -846,7 +848,7 @@ B<sup>OUT</sup><sub>FROM</sub> = B<sup>IN</sup><sub>WHERE</sub>  =
     <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}, idx: 1>
 >>
 ```
-Notice here the `FROM` clause outputs a bag instead of a list. (See Spec section 5.1 Ranging Over Bags and Arrays)
+Notice here the `FROM` clause outputs a bag instead of a list. (See [PartiQL specification 2019, Section 5.1, Ranging Over Bags and Arrays](https://partiql.org/assets/PartiQL-Specification.pdf#subsection.5.1)).
 
 B<sup>OUT</sup><sub>WHERE</sub> = B<sup>IN</sup><sub>SELECT</sub>  =
 ```
@@ -1028,7 +1030,7 @@ WINDOWED
 ```
 
 The first row returns `{ 'previous_a': 'Out of Partition' }` because current row is the first row in partition, and `lag(sp.a)` tries to access the row before, which is out of the window partition. Therefore, it returns the default value.
-The second row returns an empty struct `{}` , this is because the current row is now the second row, and `lag(sp.a)` essentially evaluates `sp.a` over the binding tuple `{ 'trade_date': `2022-09-30`, 'ticker': 'AMZN', 'price': 113.00}`. Since there is no binding name `a` in the binding tuple, the query returns `missing` in permissive mode.
+The second row returns an empty struct `{}` , this is because the current row is now the second row, and `lag(sp.a)` essentially evaluates `sp.a` over the binding tuple `{ 'trade_date': `2022-09-30`, 'ticker': 'AMZN', 'price': 113.00}`. Since there is no binding name `a` in the binding tuple, the query returns `missing` in permissive mode as outlined in [PartiQL specification 2019](https://partiql.org/assets/PartiQL-Specification.pdf).
 
 ### Appendix
 1. [Key words for use in RFCs to Indicate Requirement Levels](https://datatracker.ietf.org/doc/html/rfc2119) shows the meaning of key words "MUST", "MUST NOT", "REQUIRED", etc.
