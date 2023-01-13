@@ -56,7 +56,7 @@ This section proceed in four steps:
 
 #### WINDOWED Clause 
 
-The `WINDOWED` clause can be viewed as a modular function, with $B^{in}_{WINDOWED}$ (a bag of binding tuples) as an input parameter to the function.
+The `WINDOWED` clause can be viewed as a function, with $B^{in}_{WINDOWED}$ (a bag of binding tuples) as an input parameter to the function.
 
 ```sql
 WINDOWED (
@@ -545,9 +545,7 @@ The position variable `pos` MUST be unique for each binding tuple.
 
 The `WINDOWED` clause computes the partition for each row and makes the partition available in its output using partition variable `p` with position variable `pos`. These variables can then get accessed by the next clause (as next clause's input) to perform further operations. The scoping rules and path navigation behave as what has already been specified in the spec's sections `3.4` and `10`. Example 2.1 shows an example of this.
 
-Like other clauses, the output of binding tuples from `WINDOWED` clauses becomes the input of next operator. 
-
-The scoping rules and path navigation behave as what has already been specified in the spec's sections `3.4` and `10`.
+Like other clauses, the output of binding tuples from `WINDOWED` clauses becomes the input of next operator.
 
 Example 2.1: 
 
@@ -617,12 +615,43 @@ Suppose that a query:
 Then the query is rewritten using the following process:
 
 * If the query contains variants of SQL's WINDOW clause, rewrite the query in form of inline window specification by replacing the window alias with the specification associated with it.
-* Denote each window function as $wf_i$, its window specification $ws_i$
-* Add a WINDOWED keyword(if not already exist)
-* For each window function $wf_i$:
-* Add the inline window specification $ws_i$
-* Add PARTITION AS $ws\\_i\\_partition$ AT $ws\\_i\\_pos$
-* Rewrite $wf_i$ into $wf'_i$ where $wf'_i$ is a PartiQL expression. Note $wf_i$ does not necessary need to be a function
+
+I.E: From Example 3.3 
+```sql
+SELECT
+    rank() OVER w1,
+    lag(price) OVER w2
+FROM stock as s
+WINDOW w1 AS (PARTITION BY ticker)
+       w2 AS (w1 ORDER BY trade_date) -- reuse window definition
+```
+To : 
+```sql
+SELECT 
+    rank() OVER (PARTITION BY ticker), -- inline window specification
+    lag(price) OVER (PARTITION BY ticker ORDER BY trade_date)
+FROM stock as s
+```
+
+* Denote each window function (E.g. `rank()`) as $wf_i$, its window specification(E.g. `PARTITION BY ticker`) as $ws_i$ 
+* Create a `WINDOWED` clause
+  * For each window function $wf_i$:
+  * Add the inline window specification $ws_i$
+  * Add PARTITION AS $ws\\_i\\_partition$ AT $ws\\_i\\_pos$
+
+E.g.:
+```sql
+WNDOWED
+    (PARTITION BY l.ticker ORDER BY l.trade_date) 
+        PARTITION AS ws_1_partition AT ws_1_pos
+    (PARTITION BY l.ticker ORDER BY l.trade_date)
+        PARTITION AS ws_2_partition AT ws_2_pos
+```
+
+* Rewrite $wf_i$ into $wf'_i$ where $wf'_i$ is a PartiQL expression. Note $wf_i$ does not necessary need to be a function and is implementation specific.
+
+
+
 
 For each SQL window function $wf$, an implementation MAY offer a corresponding core PartiQL expression $wf'$. For example, the mapping relationship for SQL’s `LAG` function is
 
@@ -691,7 +720,7 @@ Supported grammar:
     [ <window order by clause> ]
     
 <window partition clause> ::= PARTITION BY <window partition reference list>
-<window partition reference list> ::= <expr query> [ <expr query> ... ]
+<window partition reference list> ::= <expr query> [ <comma> <expr query> ... ]
 <window order by clause> ::= ORDER BY <window sort specification list> 
 <window sort specification list> ::= <sort specification> [ { <comma> <sort specification> } ... ]
 <sort specification> ::= <sort key> [ <ordering specification> ] [ <null ordering> ]
