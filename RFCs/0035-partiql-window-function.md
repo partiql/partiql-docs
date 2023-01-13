@@ -541,15 +541,27 @@ The output binding collection is:
 The position variable `pos` MUST be unique for each binding tuple.
 
 
-#### Operations Over Partition
+#### Operating on WINDOWED clause output
 
 The `WINDOWED` clause computes the partition for each row and makes the partition available in its output using partition variable `p` with position variable `pos`. These variables can then get accessed by the next clause (as next clause's input) to perform further operations. The scoping rules and path navigation behave as what has already been specified in the spec's sections `3.4` and `10`. Example 2.1 shows an example of this.
 
 Like other clauses, the output of binding tuples from `WINDOWED` clauses becomes the input of next operator.
 
 Example 2.1: 
+Consider the database: 
 
-Consider if we would like to retrieve the current price and the previous price of a given stock, and if there is no previous data, we want to return null.
+$\rho_0$ =
+```
+<
+    stock : <<
+        { 'trade_date' : 2022-09-30, 'ticker' : 'AMZN', 'price' : 113.00 },
+        { 'trade_date' : 2022-10-03, 'ticker' : 'AMZN', 'price' : 115.88 },
+        { 'trade_date' : 2022-09-30, 'ticker' : 'GOOG', 'price' : 96.15 }
+   >>         
+>
+```
+
+If we would like to retrieve the current price and the previous price of a given stock, and if there is no previous data, we want to return null.
 ```sql
 SELECT VALUE
     {'ticker' : stock.ticker,
@@ -564,7 +576,76 @@ WINDOWED (
     ) PARTITION AS p AT pos
 ```
 
-Note that the casting to list is necessary because `SELECT VALUE` wraps the result in a bag. See example 4.1 for a more detailed walk through. 
+The `WINDOWED` clause outputs a collection of binding tuples(See Example 1.4), which is consumed by the SELECT clause:
+
+B<sup>OUT</sup><sub>WINDOWED</sub> = B<sup>IN</sup><sub>SELECT</sub>  =
+
+```
+<<
+   <
+    stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00},
+    ws_1_partition : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
+        ],
+    ws_1_pos: 0
+   >,
+   <
+    stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88},
+    ws_1_partition : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
+          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
+        ],
+    ws_1_pos: 1
+   >,
+   <
+    stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15},
+    ws_1_partition : [
+          <stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15}>
+        ],
+    ws_1_pos: 0
+   > 
+>>
+```
+
+For the first tuple, `ws_1_pos - 1 = -1` therefore the `previous_price` will be null.
+For the second tuple, `ws_1_pos - 1 = 0`, we evaluate the expression `CAST (SELECT VALUE s.price FROM ws_1_partition AT idx WHERE idx = ws_1_pos - 1 AS LIST)[0]`.
+
+B<sup>OUT</sup><sub>FROM</sub> = B<sup>IN</sup><sub>WHERE</sub>  =
+```
+<<
+    <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}, idx: 0>,
+    <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}, idx: 1>
+>>
+```
+Notice here the `FROM` clause outputs a bag instead of a list. (See [PartiQL specification 2019, Section 5.1, Ranging Over Bags and Arrays](https://partiql.org/assets/PartiQL-Specification.pdf#subsection.5.1)).
+
+B<sup>OUT</sup><sub>WHERE</sub> = B<sup>IN</sup><sub>SELECT</sub>  =
+```
+<<
+    <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}, idx: 0>,
+>>
+```
+The sub-query outputs `<< 113.00 >>`, to retrieve the value, we cast the bag to a list and extract the first item in the produced list.
+
+The final result is :
+```sql
+-- result:       
+-- <<
+--   {
+--     'trade_date': `2022-09-30`, 'ticker': 'AMZN',
+--     'current_price': 113.00, 'previous_price': NULL
+--   },
+--   {
+--     'trade_date': `2022-10-03`, 'ticker': 'AMZN',
+--     'current_price': 115.88, 'previous_price': 113.00
+--   },
+--   {
+--     'trade_date': `2022-09-30`, 'ticker': 'GOOG',
+--     'current_price': 96.15, 'previous_price': NULL
+--   }
+-- >>     
+```
 
 #### SQL Compatibility
 
@@ -765,12 +846,15 @@ Window specification:
 
 Reusing the previous example:
 
+$\rho_0$ =
 ```
-<<
-  { 'trade_date' : 2022-09-30, 'ticker' : 'AMZN', 'price' : 113.00 },
-  { 'trade_date' : 2022-10-03, 'ticker' : 'AMZN', 'price' : 115.88 },
-  { 'trade_date' : 2022-09-30, 'ticker' : 'GOOG', 'price' : 96.15 }    
->>
+<
+    stock : <<
+        { 'trade_date' : 2022-09-30, 'ticker' : 'AMZN', 'price' : 113.00 },
+        { 'trade_date' : 2022-10-03, 'ticker' : 'AMZN', 'price' : 115.88 },
+        { 'trade_date' : 2022-09-30, 'ticker' : 'GOOG', 'price' : 96.15 }
+   >>         
+>
 ```
 
 Example 4.1 : 
@@ -822,6 +906,7 @@ Such query can be rewritten in PartiQL Core as:
 ```sql
 -- Equivalent PartiQL Core query
 -- See Example 1.4 for the Binding Tuples created by WINDOWED clause 
+-- See Example 2.1 for a detailed walk through
 SELECT value {
     'date' : s.trade_date,
     'ticker' : s.ticker,
@@ -834,61 +919,7 @@ FROM stock as s
 WINDOWED
     (PARTITION BY s.ticker ORDER BY s.trade_date) 
         PARTITION AS ws_1_partition AT ws_1_pos
-```
-The `WINDOWED` clause outputs a collection of binding tuples(See Example 1.4), which is consumed by the SELECT clause:
 
-B<sup>OUT</sup><sub>WINDOWED</sub> = B<sup>IN</sup><sub>SELECT</sub>  = 
-
-```
-<<
-   <
-    stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00},
-    ws_1_partition : [
-          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
-          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
-        ],
-    ws_1_pos: 0
-   >,
-   <
-    stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88},
-    ws_1_partition : [
-          <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
-          <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
-        ],
-    ws_1_pos: 1
-   >,
-   <
-    stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15},
-    ws_1_partition : [
-          <stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15}>
-        ],
-    ws_1_pos: 0
-   > 
->>
-```
-
-For the first tuple, `ws_1_pos - 1 = -1` therefore the `previous_price` will be null. 
-For the second tuple, `ws_1_pos - 1 = 0`, we evaluate the expression `CAST (SELECT VALUE s.price FROM ws_1_partition AT idx WHERE idx = ws_1_pos - 1 AS LIST)[0]`.
-
-B<sup>OUT</sup><sub>FROM</sub> = B<sup>IN</sup><sub>WHERE</sub>  =
-```
-<<
-    <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}, idx: 0>,
-    <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}, idx: 1>
->>
-```
-Notice here the `FROM` clause outputs a bag instead of a list. (See [PartiQL specification 2019, Section 5.1, Ranging Over Bags and Arrays](https://partiql.org/assets/PartiQL-Specification.pdf#subsection.5.1)).
-
-B<sup>OUT</sup><sub>WHERE</sub> = B<sup>IN</sup><sub>SELECT</sub>  =
-```
-<<
-    <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}, idx: 0>,
->>
-```
-The sub-query outputs `<< 113.00 >>`, to retrieve the value, we cast the bag to a list and extract the first item in the produced list. 
-
-The final result is :
-```sql
 -- result:       
 -- <<
 --   {
@@ -905,6 +936,7 @@ The final result is :
 --   }
 -- >>     
 ```
+
 
 
 Example 3.2: Use of aggregate function
