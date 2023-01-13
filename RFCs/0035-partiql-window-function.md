@@ -49,7 +49,7 @@ Each binding tuple outputted by the `WINDOWED` clause contains "information" reg
 
 This section proceed in four steps:
 - Section [WINDOWED Clause](#WINDOWED-Clause) explains the core PartiQL WINDOWED structure and the binding tuples created by `WINDOWED` clause.
-- Section [Operations on Partition](#Operations-Over-Partition) explains how to perform operations over the produced partition data.
+- Section [Operating on WINDOWED Clause Output](#Operating-on-WINDOWED-Clause-Output) explains how to perform operations over the produced partition data.
 - Section [SQL Compatibility](#SQL-Compatibility) shows that SQL's window functions can be explained by PartiQL's `WINDOWED` clause and expressions.
 
 
@@ -71,7 +71,9 @@ Where $e_1,...,e_n$ is a list of **partition expressions**, $o_1,....,o_n$ is a 
 
 1. PARTITION BY sub-clause(Visual examples on partition are provided in Appendix 7):
 
-* If PARTITION BY is presented: $B^{in}_{WINDOWED}$ is partitioned into the minimal number of equivalence partition $B_1,...,B_n$. For two binding tuples $b, b' \in B^{in}_{WINDOWED}$ are in the same equivalence partition if and only if every partition expression $e_i$ evaluates to equivalent values $v_i$ (when evaluated on b) and $v_i'$ (when evaluated on $b'$).
+* If PARTITION BY is presented: 
+  * $B^{in}_{WINDOWED}$ is partitioned into the minimal number of equivalence partition $B_1,...,B_n$. 
+  * Two binding tuples $b, b' \in B^{in}_{WINDOWED}$ are in the same equivalence partition if and only if every partition expression $e_i$ evaluates to equivalent values $v_i$ (when evaluated on b) and $v_i'$ (when evaluated on $b'$).
 
 The equivalence rule is the same as the one used in `GROUP BY` clause (Appendix 2). 
 * If there is no `PARTITION BY`, the entire input binding collection is considered as one partition.
@@ -84,7 +86,7 @@ The equivalence rule is the same as the one used in `GROUP BY` clause (Appendix 
 
 3. WINDOWED clause output:
 
-* For each binding tuple $b_i$ in $B^{in}_{WINDOWED}$, output $b = b_i || < p : B_i, pos: x>$ where `< p : B_i, pos: x>` is a binding tuple, $b_i$ in $B_i$, and $p[x] = b_i$.
+* For each binding tuple $b_i$ in $B^{in}_{WINDOWED}$, output $b = b_i || < p : B_i, pos: x>$ where $< p : B_i, pos: x>$ is a binding tuple, $b_i$ in $B_i$, and $p[x] = b_i$.
 * Notice that in case of duplication, the pos is nondeterministic but **MUST** be guaranteed to be unique.
 
 Logically, `WINDOWED` clause is evaluated after `GROUP BY` and `HAVING` and before `ORDER BY`, the evaluation order looks like:
@@ -541,7 +543,7 @@ The output binding collection is:
 The position variable `pos` MUST be unique for each binding tuple.
 
 
-#### Operating on WINDOWED clause output
+#### Operating on WINDOWED Clause Output
 
 The `WINDOWED` clause computes the partition for each row and makes the partition available in its output using partition variable `p` with position variable `pos`. These variables can then get accessed by the next clause (as next clause's input) to perform further operations. The scoping rules and path navigation behave as what has already been specified in the spec's sections `3.4` and `10`. Example 2.1 shows an example of this.
 
