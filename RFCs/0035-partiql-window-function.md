@@ -789,9 +789,9 @@ Supported grammar:
 ```
 <window function> ::= <window function type> OVER <window specification> 
 <window function type> ::= <lead or lag function>
-<lead or lag function> ::= <lead or lag> <left paren> <lead or lag extent> 
-    [ <comma> <offset> 
-        [ <comma> < default expression] ] <right paren> 
+<lead or lag function> ::= 
+    <lead or lag> <left paren> <lead or lag extent>
+        [ <comma> <offset> [ <comma> <default expression> ] ] <right paren>
 <lead or lag> :: LEAD | LAG
 <lead or lag extend> ::= <expr query>
 <offset> :: <extract numeric literal> (* SQL spec*)
@@ -803,7 +803,7 @@ Supported grammar:
     [ <window order by clause> ]
     
 <window partition clause> ::= PARTITION BY <window partition reference list>
-<window partition reference list> ::= <expr query> [ <comma> <expr query> ... ]
+<window partition reference list> ::= <expr query> [ { <comma> <expr query> } ... ]
 <window order by clause> ::= ORDER BY <window sort specification list> 
 <window sort specification list> ::= <sort specification> [ { <comma> <sort specification> } ... ]
 <sort specification> ::= <sort key> [ <ordering specification> ] [ <null ordering> ]
