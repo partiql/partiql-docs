@@ -586,32 +586,32 @@ B<sup>OUT</sup><sub>WINDOWED</sub> = B<sup>IN</sup><sub>SELECT</sub>  =
 <<
    <
     stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00},
-    ws_1_partition : [
+    p : [
           <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
           <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
         ],
-    ws_1_pos: 0
+    pos: 0
    >,
    <
     stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88},
-    ws_1_partition : [
+    p : [
           <stock : {'trade_date': 2022-09-30, 'ticker': 'AMZN', 'price': 113.00}>,
           <stock : {'trade_date': 2022-10-03, 'ticker': 'AMZN', 'price': 115.88}>
         ],
-    ws_1_pos: 1
+    pos: 1
    >,
    <
     stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15},
-    ws_1_partition : [
+    p : [
           <stock : {'trade_date': 2022-09-30, 'ticker': 'GOOG', 'price': 96.15}>
         ],
-    ws_1_pos: 0
+    pos : 0
    > 
 >>
 ```
 
-For the first tuple, `ws_1_pos - 1 = -1` therefore the `previous_price` will be null.
-For the second tuple, `ws_1_pos - 1 = 0`, we evaluate the expression `CAST (SELECT VALUE s.price FROM ws_1_partition AT idx WHERE idx = ws_1_pos - 1 AS LIST)[0]`.
+For the first tuple, `pos - 1 = -1` therefore the `previous_price` will be null.
+For the second tuple, `pos - 1 = 0`, we evaluate the expression `CAST (SELECT VALUE s.price FROM p AT idx WHERE idx = pos - 1 AS LIST)[0]`.
 
 B<sup>OUT</sup><sub>FROM</sub> = B<sup>IN</sup><sub>WHERE</sub>  =
 ```
