@@ -75,7 +75,7 @@ Note:
     | DO REPLACE <do replace>
 
 <do update> ::= 
-	EXCLUDED [ WHERE <condition> ]
+    EXCLUDED [ WHERE <condition> ]
     | SET <attr values> [, <attr values>]... [ WHERE <condition> ]
 
 <do replace> ::= 
