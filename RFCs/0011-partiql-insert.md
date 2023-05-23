@@ -74,14 +74,14 @@ Note:
     | DO UPDATE <do update>
     | DO REPLACE <do replace>
 
-<do update> ::= EXCLUDED
-    | SET <attr values> [, <attr values>]...
-   [ WHERE <condition> ]
+<do update> ::= 
+	EXCLUDED [ WHERE <condition> ]
+    | SET <attr values> [, <attr values>]... [ WHERE <condition> ]
 
-<do replace> ::= EXCLUDED
-    | SET <attr values> [, <attr values>]...
-    | VALUE <tuple value>
-   [ WHERE <condition> ]
+<do replace> ::= 
+    EXCLUDED [ WHERE <condition> ]
+    | SET <attr values> [, <attr values>]... [ WHERE <condition> ]
+    | VALUE <tuple value> [ WHERE <condition> ]
 
 <attr values> ::=  {
             <attr name> = { <value expr> | DEFAULT }
