@@ -44,9 +44,9 @@ The SQL operators are defined in terms of: let *R* be some row in *T1* or *T2* o
 
 For *SQL_UNION*, the number of duplicates of *R* in *TR* will be *(m + n)*.
 
-For *SQL_INTERSECT*, the number of duplicates of *R* in *TR* will be the maximum of *(m - n)* and *0*.
+For *SQL_INTERSECT*, the number of duplicates of *R* in *TR* will be the minimum of *m* and *n*.
 
-For *SQL_EXCEPT*, the number of duplicates of *R* in *TR* will be the minimum of *m* and *n*.
+For *SQL_EXCEPT*, the number of duplicates of *R* in *TR* will be the maximum of *(m - n)* and *0*.
 
 Let *V1* and *V2* be arbitrary values, and let *F* be a function which coerces a value to a bag. The *OUTER* operators are defined as
 ```
