@@ -1,6 +1,6 @@
 = PartiQL Reserved Keywords
 
-Reserved keywords are part of PartiQL Language that are used by PartiQL to parse and understand PartiQL statements.
+The PartiQL language uses reserved keywords to parse and understand PartiQL statements.
 PartiQL Language Grammar Reserved Keywords cannot be used in PartiQL statements as-is.
 For example, the following query results in a _Syntax Error_ because `FROM` is a Reserved Keyword in PartiQL:
 
