@@ -2,12 +2,17 @@
 
 The PartiQL language uses reserved keywords to parse and understand PartiQL statements.
 PartiQL Language Grammar Reserved Keywords cannot be used in PartiQL statements as-is.
-For example, the following query results in a _Syntax Error_ because `FROM` is a Reserved Keyword in PartiQL:
+Example 1 shows queries that result in _Syntax Error_ because `FROM` is a Reserved Keyword in PartiQL:
 
 .Example 1. Invalid PartiQL Query with a Reserved Keyword
 [source, sql]
 ----
 SELECT t.FROM FROM <<{'ID': 1, 'FROM': 'NA'}, {'ID': 2, 'FROM': 'SA'}>> AS t;
+-- Output: Syntax Error
+
+-- A reference to a Reserved Keyword is case-insensitive
+SELECT t.from FROM <<{'ID': 1, 'FROM': 'NA'}, {'ID': 2, 'FROM': 'SA'}>> AS t;
+-- Output: Syntax Error
 ----
 
 In order to use Reserved Keywords in your PartiQL statements, use Quoted Identifiers as Example 2 shows:
@@ -16,6 +21,17 @@ In order to use Reserved Keywords in your PartiQL statements, use Quoted Identif
 [source, sql]
 ----
 SELECT t."FROM" FROM <<{'ID': 1, 'FROM': 'NA'}, {'ID': 2, 'FROM': 'SA'}>> AS t;
+
+-- Output: <<{'FROM': 'NA'}, {'FROM': 'SA'}
+----
+
+_Note: In PartiQL a Quoted Identifier is case-sensitive; because of this rule, no result will get returned from the query shown in Example 3._
+
+.Example 3. Case sensitivity of Quoted Identifiers.
+[source, sql]
+----
+SELECT t."FROM" FROM <<{'ID': 1, 'from': 'NA'}, {'ID': 2, 'from': 'SA'}>> AS t;
+-- Output: <<{}, {}>>
 ----
 
 == Reserved Keywords
