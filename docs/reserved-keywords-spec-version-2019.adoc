@@ -15,7 +15,7 @@ SELECT t.from FROM <<{'ID': 1, 'FROM': 'NA'}, {'ID': 2, 'FROM': 'SA'}>> AS t;
 -- Output: Syntax Error
 ----
 
-In order to use Reserved Keywords in your PartiQL statements, use Quoted Identifiers as Example 2 shows:
+In order to use reserved keywords in your PartiQL statements, use quoted identifiers as Example 2 shows:
 
 .Example 2. Using Quoted Identifier as a Reserve Keyword in a PartiQL Statement.
 [source, sql]
@@ -25,9 +25,9 @@ SELECT t."FROM" FROM <<{'ID': 1, 'FROM': 'NA'}, {'ID': 2, 'FROM': 'SA'}>> AS t;
 -- Output: <<{'FROM': 'NA'}, {'FROM': 'SA'}
 ----
 
-_Note: In PartiQL a Quoted Identifier is case-sensitive; because of this rule, no result will get returned from the query shown in Example 3 with no Schema in the environment._
+_Note: In PartiQL, a Quoted Identifier is case-sensitive; because of this rule, no result will get returned from the query shown in Example 3 in the absence of schemas in the environment._
 
-.Example 3. Case sensitivity of Quoted Identifiers.
+.Example 3. Case sensitivity of quoted identifiers.
 [source, sql]
 ----
 SELECT t."FROM" FROM <<{'ID': 1, 'from': 'NA'}, {'ID': 2, 'from': 'SA'}>> AS t;
@@ -37,7 +37,7 @@ SELECT t."FROM" FROM <<{'ID': 1, 'from': 'NA'}, {'ID': 2, 'from': 'SA'}>> AS t;
 == Reserved Keywords
 [NOTE]
 ====
-Reserved Keywords are yet to be https://github.com/partiql/partiql-spec/issues/2[formally defined] in PartiQL Specification, therefore there may be some differences in different PartiQL implementations.
+Reserved keywords are yet to be https://github.com/partiql/partiql-spec/issues/2[formally defined] in PartiQL Specification, therefore there may be some differences in different PartiQL implementations.
 ====
 
 [cols="1,1,1,1",grid=none, frame=none]
