@@ -22,7 +22,7 @@ In order to use reserved keywords in your PartiQL statements, use quoted identif
 ----
 SELECT t."FROM" FROM <<{'ID': 1, 'FROM': 'NA'}, {'ID': 2, 'FROM': 'SA'}>> AS t;
 
--- Output: <<{'FROM': 'NA'}, {'FROM': 'SA'}
+-- Output: <<{'FROM': 'NA'}, {'FROM': 'SA'}>>
 ----
 
 _Note: In PartiQL, a Quoted Identifier is case-sensitive; because of this rule, no result will get returned from the query shown in Example 3 in the absence of schemas in the environment._
