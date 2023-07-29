@@ -92,10 +92,10 @@ Rules:
 
 >Item 2,3,4 is to confirm with SQL spec ( see section 2,3,4). However, doing so means PartiQL currently does not have the syntactical ability to declare a type with arbitrary precision. See Unresolved question.
 
-1. If `DATE` is specified, then the data type contains the <primary datetime field>s YEAR, MONTH, and DAY.
-2. If `TIME` is specified, then the data type contains the <primary datetime field>s HOUR, MINUTE, and SECOND.
-3. If `TIMESTAMP` is specified, then the data type contains the <primary datetime field>s YEAR, MONTH, DAY, HOUR, MINUTE, and SECOND.
-4. Table 2, Valid Values for datetime fields, specifies the constraints on the values of the date time fields. The values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE` shall either both be non-negative or both be non-positive.
+5. If `DATE` is specified, then the data type contains the <primary datetime field>s YEAR, MONTH, and DAY.
+6. If `TIME` is specified, then the data type contains the <primary datetime field>s HOUR, MINUTE, and SECOND.
+7. If `TIMESTAMP` is specified, then the data type contains the <primary datetime field>s YEAR, MONTH, DAY, HOUR, MINUTE, and SECOND.
+8. Table 2, Valid Values for datetime fields, specifies the constraints on the values of the date time fields. The values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE` shall either both be non-negative or both be non-positive.
 
 | Keyword	         | Valid Values	                                                                                                                                                       |
 |------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -193,20 +193,20 @@ Rules:
 
 >Doing so limited our ability to declare a time/timestamp value with arbitrary precision. See Unresolved Question for detail.
 
-1. If <time zone interval> is not specified, then the effective <time zone interval> of the datetime data type is the current time zone displacement for the session.
-2. Within a <datetime literal>, the <years value> shall contain four digits. The <seconds integer value> and other date components, except <seconds fraction>, shall each contain two digits.
-3. Within the definition of a <datetime literal>, the <datetime values> are constrained by the natural rules for dates and times according to the Gregorian calendar.
-4. If <time zone interval> is specified, then the time and timestamp values in <time literal> and <timestamp literal> represent a datetime in the specified time zone.
-5. If <time zone interval> is specified as `-00:00`(unknown time zone), then the <time literal> and <timestamp literal> represent a date time in zulu timezone.
+6. If <time zone interval> is not specified, then the effective <time zone interval> of the datetime data type is the current time zone displacement for the session.
+7. Within a <datetime literal>, the <years value> shall contain four digits. The <seconds integer value> and other date components, except <seconds fraction>, shall each contain two digits.
+8. Within the definition of a <datetime literal>, the <datetime values> are constrained by the natural rules for dates and times according to the Gregorian calendar.
+9. If <time zone interval> is specified, then the time and timestamp values in <time literal> and <timestamp literal> represent a datetime in the specified time zone.
+10. If <time zone interval> is specified as `-00:00`(unknown time zone), then the <time literal> and <timestamp literal> represent a date time in zulu timezone.
 
 >RFC 3339: If the time in UTC is known, but the offset to local time is unknown, this can be represented with an offset of "-00:00".  This differs semantically from an offset of "Z" or "+00:00", which imply that UTC is the preferred reference point for the specified time.
 
-1. If <date value> is specified, then it is interpreted as a date in the Gregorian calendar. if <time value> is specified, then it is interpreted as a time of day. Let DV be the value of the <datetime literal>, disregarding <time zone interval>.
-2. Case:
+11. If <date value> is specified, then it is interpreted as a date in the Gregorian calendar. if <time value> is specified, then it is interpreted as a time of day. Let DV be the value of the <datetime literal>, disregarding <time zone interval>.
+12. Case:
     1. If <time zone interval> is specified, then let TZI be the value of the interval denoted by <time zone interval>. The value of the <datetime literal> is DV-TZI, with time zone displacement TZI.
     2.  otherwise, the value of the <datetime literal> is DV.
-3. If <time zone interval> is specified, then a <time literal> or <timestamp literal> is interpreted as local time with specified time zone displacement. However, it is effectively converted to UTC while retaining the original time zone displacement.
-4. If <time zone interval> is not specified, then no assumption is made about time zone displacement. However, should a time zone displacement be required during subsequent processing, the current default time zone displacement of the PartiQL-session will be applied at that time.
+13. If <time zone interval> is specified, then a <time literal> or <timestamp literal> is interpreted as local time with specified time zone displacement. However, it is effectively converted to UTC while retaining the original time zone displacement.
+14. If <time zone interval> is not specified, then no assumption is made about time zone displacement. However, should a time zone displacement be required during subsequent processing, the current default time zone displacement of the PartiQL-session will be applied at that time.
 
 Examples:
 
@@ -410,7 +410,9 @@ DATE_DIFF(
 
 
 The comparison of two datetimes is determined according to the result of `DATE_DIFF` function. Let X and Y be the two values to be compared and let H be the least significant <primary datetime field> of X and Y, including fractional seconds precision if the data type is time or timestamp.
+
 a) X is equal to Y if and only if DATE_DIFF(H, X, Y) = 0
+
 b) X is less than Y if and only if DATE_DIFF(H, X, Y) < 0
 
 Example:
