@@ -183,7 +183,6 @@ Grammar:
 
 >PartiQL extends the SQL date time string format to support RFC 3339 format. That is 1) PartiQL **SHALL** support use of `T` as date time delimiter and use of `Z` as Zulu time zone. 2)  PartiQL **SHALL** support Unknown Time Zone (-00:00).
 
-
 Rules:
 
 1. The declared type of <date literal> is a DATE.
@@ -208,7 +207,6 @@ Rules:
     2.  otherwise, the value of the <datetime literal> is DV.
 3. If <time zone interval> is specified, then a <time literal> or <timestamp literal> is interpreted as local time with specified time zone displacement. However, it is effectively converted to UTC while retaining the original time zone displacement.
 4. If <time zone interval> is not specified, then no assumption is made about time zone displacement. However, should a time zone displacement be required during subsequent processing, the current default time zone displacement of the PartiQL-session will be applied at that time.
-
 
 Examples:
 
@@ -283,33 +281,33 @@ TIMESTAMP '2023-05-31T17:00:00-07:00'
 | from TIME WITH TIME ZONE	         | not supported	            | SV.UTC + SV.TZ(modulo 24)	  | trivial	                                      | SV => TSw/TZ => TSwo/TZ	                                      | Copy date fields from CURRENT_DATE and time and time zone fields from SV.	 |
 | from TIMESTAMP WITHOUT TIME ZONE	 | Copy date fields from SV	 | Copy time fields from SV	   | SV => TSw/TZ => TIMEw/TZ	                     | trivial	                                                      | TV.UTC = SV - STZD; TV.TZ = STZD;	                                         |
 | from TIMESTAMP WITH TIME ZONE	    | SV => TSw/oTZ => DATE	    | SV => TSw/oTZ => TIMEw/oTZ	 | Copy time and time zone fields from SV	       | SV.UTC + SV.TZ	                                               | trivial	                                                                   |
+
 Table 4: Datetime data type conversion; Table from SQL Spec.
 
 > SV is the source value, TV is the target value, UTC is the UTC component of SV or TV (if and only if the source or target has time zone), TZ is the time zone displacement of SV or TV (if and only if the source or target has time zone), STZD is the session default time zone displacement, => means to cast from the type preceding the arrow to the type following the arrow. TIMEw/TZ is TIME WITH TIME ZONE, TIMEw/oTZ is TIME WITHOUT TIME ZONE, TSw/TZ is TIMESTAMP WITH TIME ZONE, and TSw/oTZ is TIMESTAMP WITHOUT TIME ZONE.
-
 
 Examples:
 
 ```
 // Illegal operation
 // DATE -> TIME WITHOUT TIME ZONE
-cast (DATE '2023-06-01' AS TIME) // Exception
+cast(DATE '2023-06-01' AS TIME) // Exception
 
 // DATE -> TIME WITH TIME ZONE
-cast (DATE '2023-06-01' AS TIME WITH TIME ZONE) // Exception
+cast(DATE '2023-06-01' AS TIME WITH TIME ZONE) // Exception
 
 // TIME WITHOUT TIME ZONE -> DATE
-cast (TIME '00:00:00' AS DATE) // Exception
+cast(TIME '00:00:00' AS DATE) // Exception
 
 // TIME WITH TIME ZONE -> DATE
-cast (TIME '00:00:00+00:00' as DATE) // Exception
+cast(TIME '00:00:00+00:00' as DATE) // Exception
 
 // session independent operation
-cast (DATE '2023-06-01' AS TIMESTAMP) // TIMESTAMP '2023-06-01 00:00:00'
+cast(DATE '2023-06-01' AS TIMESTAMP) // TIMESTAMP '2023-06-01 00:00:00'
 
-cast (TIMESTAMP '2023-06-01 00:00:00' AS DATE) // DATE '2023-06-01'
+cast(TIMESTAMP '2023-06-01 00:00:00' AS DATE) // DATE '2023-06-01'
 
-cast (TIMESTAMP '2023-06-01 00:00:00' AS TIME) // TIME '00:00:00'
+cast(TIMESTAMP '2023-06-01 00:00:00' AS TIME) // TIME '00:00:00'
 
 // Session Dependent
 // assume current_date is 2023-06-01 
@@ -317,39 +315,39 @@ cast (TIMESTAMP '2023-06-01 00:00:00' AS TIME) // TIME '00:00:00'
 // current tiem zone is -07:00
 
 // TIME WITHOUT TIME ZONE -> TIME WITH TIME ZONE
-cast (TIME '00:00:00' AS TIME WITH TIME ZONE)
+cast(TIME '00:00:00' AS TIME WITH TIME ZONE)
 // TIME '00:00:00-07:00'
 
 // TIME WITH TIME ZONE -> TIME WITHOUT TIME ZONE
-cast (TIME '00:00:00+00:00' AS TIME)
+cast(TIME '00:00:00+00:00' AS TIME)
 // TIME '17:00:00'
 
 // TIMESTAMP WITHOUT TIME ZONE -> TIMESTAMP WITH TIME ZONE
-cast (TIMESTAMP '2023-06-01 00:00:00' AS TIMESTAMP WITH TIME ZONE)
+cast(TIMESTAMP '2023-06-01 00:00:00' AS TIMESTAMP WITH TIME ZONE)
 // TIMESTAMP '2023-06-01 00:00:00-07:00'
 
 // TIMESTAMP WITH TIME ZONE -> TIMESTAMP WITHOUT TIME ZONE
-cast (TIMESTAMP '2023-06-01 00:00:00+00:00' AS TIMESTAMP) 
+cast(TIMESTAMP '2023-06-01 00:00:00+00:00' AS TIMESTAMP) 
 // TIMESTAMP '2023-05-31 17:00:00'
 
 // TIME WITHOUT TIME ZONE -> TIMESTAMP WITHOUT TIME ZONE
-cast (TIME '00:00:00' AS TIMESTAMP) 
+cast(TIME '00:00:00' AS TIMESTAMP) 
 // TIMESTAMP '2023-06-01 00:00:00'
 
 // TIME WITHOUT TIME ZONE -> TIMESTAMP WITH TIME ZONE  
-cast (TIME '00:00:00' AS TIMESTAMP WITH TIME ZONE)
+cast(TIME '00:00:00' AS TIMESTAMP WITH TIME ZONE)
 // TIMESTAMP '2023-06-01 00:00:00-07:00'
 
 // TIME WITH TIME ZONE -> TIMESTAMP WITH TIME ZONE
-cast (TIME '00:00:00+00:00' AS TIMESTAMP WITH TIME ZONE)
+cast(TIME '00:00:00+00:00' AS TIMESTAMP WITH TIME ZONE)
 // TIMESTAMP '2023-06-01 00:00:00+00:00'
 
 // TIME WITH TIME ZONE -> TIMESTAMP WITHOUT TIME ZONE
-cast (TIME '00:00:00+00:00' AS TIMESTAMP)
+cast(TIME '00:00:00+00:00' AS TIMESTAMP)
 // TIMESTAMP '2023-05-31 17:00:00'
 
 // DATE -> TIMESTAMP WITH TIME ZONE
-cast (DATE '2023-06-01' AS TIMESTAMP WITH TIME ZONE)
+cast(DATE '2023-06-01' AS TIMESTAMP WITH TIME ZONE)
 // TIMESTAMP '2023-05-31 17:00:00'
 ```
 
@@ -484,8 +482,6 @@ ORDER BY l.ts
     {'sensor':1, 'co':0.5, 'ts': TIMESTAMP '2023-07-01 04:05:07-07:00'}
 ]
 ```
-
-
 
 #### Ion Serialization
 
