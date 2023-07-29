@@ -84,17 +84,17 @@ For conformance of SQL spec, PartiQL permits implicit conversion between a datet
 
 Rules:
 
-1. The number of decimal digits following the decimal point in the SECOND <primary datetime field> is defined by <precision>.
-2. If <precision> is not specified in TIME type, then 0 is implicit.
-3. If <precision> is not specified in TIMESTAMP type, then 6 is implicit.
-4. If <with or without time zone> is not specified, then WITHOUT TIME ZONE is implicit.
+1. `<precision>` defines the number of decimal digits following the decimal point in the SECOND `<primary datetime field>`.
+2. If `<precision>` is not specified in TIME type, then 0 is implicit.
+3. If `<precision>` is not specified in TIMESTAMP type, then 6 is implicit.
+4. If `<with or without time zone>` is not specified, then WITHOUT TIME ZONE is implicit.
     1. SQL-1999 - Section 6.1 - Syntax Rules - 30/ 31
 
 >Item 2,3,4 is to confirm with SQL spec ( see section 2,3,4). However, doing so means PartiQL currently does not have the syntactical ability to declare a type with arbitrary precision. See Unresolved question.
 
-5. If `DATE` is specified, then the data type contains the <primary datetime field>s YEAR, MONTH, and DAY.
-6. If `TIME` is specified, then the data type contains the <primary datetime field>s HOUR, MINUTE, and SECOND.
-7. If `TIMESTAMP` is specified, then the data type contains the <primary datetime field>s YEAR, MONTH, DAY, HOUR, MINUTE, and SECOND.
+5. If `DATE` is specified, then the data type contains the `<primary datetime field>`s YEAR, MONTH, and DAY.
+6. If `TIME` is specified, then the data type contains the `<primary datetime field>`s HOUR, MINUTE, and SECOND.
+7. If `TIMESTAMP` is specified, then the data type contains the `<primary datetime field>`s YEAR, MONTH, DAY, HOUR, MINUTE, and SECOND.
 8. Table 2, Valid Values for datetime fields, specifies the constraints on the values of the date time fields. The values of `TIMEZONE_HOUR` and `TIMEZONE_MINUTE` shall either both be non-negative or both be non-positive.
 
 | Keyword	         | Valid Values	                                                                                                                                                       |
@@ -185,28 +185,28 @@ Grammar:
 
 Rules:
 
-1. The declared type of <date literal> is a DATE.
-2. The declared type of <time literal> that does not specify <time zone interval> is of type `TIME(p) WITHOUT TIME ZONE` where `p` is the number of digits in second fraction.
-3. The declared type of <time literal> that specifies <time zone interval> is of type `TIME(p) WITH TIME ZONE` where `p` is the number of digits in second fraction.
-4. The declared type of <timestamp literal> that does not specify <time zone interval> is of type `TIMESTAMP(p) WITHOUT TIME ZONE` where `p` is the number of digits in second fraction.
-5. The declared type of <timestamp literal> that specifies <time zone interval> is of type `TIMESTAMP(p) WITH TIME ZONE` where `p` is the number of digits in second fraction.
+1. The declared type of `<date literal>` is a DATE.
+2. The declared type of `<time literal>` that does not specify `<time zone interval>` is of type `TIME(p) WITHOUT TIME ZONE` where `p` is the number of digits in second fraction.
+3. The declared type of `<time literal>` that specifies `<time zone interval>` is of type `TIME(p) WITH TIME ZONE` where `p` is the number of digits in second fraction.
+4. The declared type of `<timestamp literal>` that does not specify `<time zone interval>` is of type `TIMESTAMP(p) WITHOUT TIME ZONE` where `p` is the number of digits in second fraction.
+5. The declared type of `<timestamp literal>` that specifies `<time zone interval>` is of type `TIMESTAMP(p) WITH TIME ZONE` where `p` is the number of digits in second fraction.
 
 >Doing so limited our ability to declare a time/timestamp value with arbitrary precision. See Unresolved Question for detail.
 
-6. If <time zone interval> is not specified, then the effective <time zone interval> of the datetime data type is the current time zone displacement for the session.
-7. Within a <datetime literal>, the <years value> shall contain four digits. The <seconds integer value> and other date components, except <seconds fraction>, shall each contain two digits.
-8. Within the definition of a <datetime literal>, the <datetime values> are constrained by the natural rules for dates and times according to the Gregorian calendar.
-9. If <time zone interval> is specified, then the time and timestamp values in <time literal> and <timestamp literal> represent a datetime in the specified time zone.
-10. If <time zone interval> is specified as `-00:00`(unknown time zone), then the <time literal> and <timestamp literal> represent a date time in zulu timezone.
+6. If `<time zone interval>` is not specified, then the effective `<time zone interval>` of the datetime data type is the current time zone displacement for the session.
+7. Within a `<datetime literal>`, the <years value> shall contain four digits. The `<seconds integer value>` and other date components, except `<seconds fraction>`, shall each contain two digits.
+8. Within the definition of a `<datetime literal>`, the `<datetime values>` are constrained by the natural rules for dates and times according to the Gregorian calendar.
+9. If `<time zone interval>` is specified, then the time and timestamp values in `<time literal>` and `<timestamp literal>` represent a datetime in the specified time zone.
+10. If `<time zone interval>` is specified as `-00:00`(unknown time zone), then the `<time literal>` and `<timestamp literal>` represent a date time in zulu timezone.
 
 >RFC 3339: If the time in UTC is known, but the offset to local time is unknown, this can be represented with an offset of "-00:00".  This differs semantically from an offset of "Z" or "+00:00", which imply that UTC is the preferred reference point for the specified time.
 
-11. If <date value> is specified, then it is interpreted as a date in the Gregorian calendar. if <time value> is specified, then it is interpreted as a time of day. Let DV be the value of the <datetime literal>, disregarding <time zone interval>.
+11. If `<date value>` is specified, then it is interpreted as a date in the Gregorian calendar. if `<time value>` is specified, then it is interpreted as a time of day. Let DV be the value of the `<datetime literal>`, disregarding `<time zone interval>`.
 12. Case:
-    1. If <time zone interval> is specified, then let TZI be the value of the interval denoted by <time zone interval>. The value of the <datetime literal> is DV-TZI, with time zone displacement TZI.
-    2.  otherwise, the value of the <datetime literal> is DV.
-13. If <time zone interval> is specified, then a <time literal> or <timestamp literal> is interpreted as local time with specified time zone displacement. However, it is effectively converted to UTC while retaining the original time zone displacement.
-14. If <time zone interval> is not specified, then no assumption is made about time zone displacement. However, should a time zone displacement be required during subsequent processing, the current default time zone displacement of the PartiQL-session will be applied at that time.
+    1. If `<time zone interval>` is specified, then let TZI be the value of the interval denoted by `<time zone interval>`. The value of the `<datetime literal>` is DV-TZI, with time zone displacement TZI.
+    2.  otherwise, the value of the `<datetime literal>` is DV.
+13. If `<time zone interval>` is specified, then a `<time literal>` or `<timestamp literal>` is interpreted as local time with specified time zone displacement. However, it is effectively converted to UTC while retaining the original time zone displacement.
+14. If `<time zone interval>` is not specified, then no assumption is made about time zone displacement. However, should a time zone displacement be required during subsequent processing, the current default time zone displacement of the PartiQL-session will be applied at that time.
 
 Examples:
 
@@ -356,10 +356,10 @@ cast(DATE '2023-06-01' AS TIMESTAMP WITH TIME ZONE)
 Define function `EXTRACT` as
 `EXTRACT(<datetime field> FROM <datetime>) → <exact numeric value>.`
 
-If the <datetime field> is not `SECOND`, the return type shall be an exact numeric value with implementation defined precision and scale 0.
-If the <datetime field> is SECOND, the return type shall be an exact numeric value with implementation defined precision and scale. The result shall preserve all digit in the `SECOND` field.
+If the `<datetime field>` is not `SECOND`, the return type shall be an exact numeric value with implementation defined precision and scale 0.
+If the `<datetime field>` is SECOND, the return type shall be an exact numeric value with implementation defined precision and scale. The result shall preserve all digit in the `SECOND` field.
 
-If <datetime> does not contains the requested <datetime field>, the function shall throw an exception in type checking mode, and return `MISSING` in permissive mode.
+If `<datetime>` does not contains the requested `<datetime field>`, the function shall throw an exception in type checking mode, and return `MISSING` in permissive mode.
 
 Examples:
 
@@ -371,7 +371,7 @@ EXTRACT(SECOND FROM TIME '00:00:00.000') // 0.000
 
 #### Comparison between two datetimes
 
-Two datetimes are comparable only if they have the same <primary datetime field>s.
+Two datetimes are comparable only if they have the same `<primary datetime field>`s.
 
 
 >The following section is for explanatory purpose only and will be replaced using Interval Type once it is defined.
@@ -379,7 +379,7 @@ Two datetimes are comparable only if they have the same <primary datetime field>
 To explain the semantic of datetime comparison, we define a function `DATE_DIFF` as
 `DATE_DIFF(<primary datetime field>, <datetime1>, <datetime2>) → <exact numeric value>.`
 The result of `DATE_DIFF` function is according to the natural rules associated with date and times, and should be interpreted as **a span of time**.
-`<datetime1>` and `<datetime2>` are required to have the same <primary datetime fields>, and needs to include the <primary datetime field> requested.
+`<datetime1>` and `<datetime2>` are required to have the same `<primary datetime fields>`, and needs to include the `<primary datetime field>` requested.
 For example:
 
 ```
@@ -409,11 +409,10 @@ DATE_DIFF(
 ```
 
 
-The comparison of two datetimes is determined according to the result of `DATE_DIFF` function. Let X and Y be the two values to be compared and let H be the least significant <primary datetime field> of X and Y, including fractional seconds precision if the data type is time or timestamp.
+The comparison of two datetimes is determined according to the result of `DATE_DIFF` function. Let X and Y be the two values to be compared and let H be the least significant `<primary datetime field>` of X and Y, including fractional seconds precision if the data type is time or timestamp.
 
-a) X is equal to Y if and only if DATE_DIFF(H, X, Y) = 0
-
-b) X is less than Y if and only if DATE_DIFF(H, X, Y) < 0
+1. X is equal to Y if and only if DATE_DIFF(H, X, Y) = 0
+2. X is less than Y if and only if DATE_DIFF(H, X, Y) < 0
 
 Example:
 
