@@ -9,11 +9,7 @@ This document gives answer to following questions informed by PartiQL Kotlin's i
 . What are type coercions?
 . What is type precedence?
 . How are functions resolved?
-. How are functions evaluated?
-. Are function arguments ever NULL or MISSING?
-. Do functions ever return NULL or MISSING?
-. Are operator arguments ever NULL or MISSING?
-. Do operators ever return NULL or MISSING?
+. How are NULL and MISSING handled in functions?
 
 == Proposals
 
@@ -28,17 +24,14 @@ For example, we way define a function called "foo" which has the given operators
 (T~2~, T~2~) -> T~2~
 ----
 
-That is, the function "foo" has an operator defined for input types `(T~1~, T~1~)` with output type `T~1`, as well as an
-operator with input types `(T~2~, T~2~)` with output type `T~2`.
+That is, the function "foo" has an operator defined for input types `(T~1~, T~1~)` with output type `T~1~`, as well as an
+operator with input types `(T~2~, T~2~)` with output type `T~2~`.
 
 Given a function name and list of arguments, the PartiQL compiler must resolve the appropriate operator.
 
 === Q2. How do we define functions and operators?
 
-NOTE: Incomplete
-
-Functions are defined by its operators. We use the SQL `CREATE FUNCTION` syntax to defined operators. The basic syntax
-is as follows:
+Functions are defined by its operators. We use the SQL `CREATE FUNCTION` syntax to defined operators introduced in xref:https://web.cecs.pdx.edu/~len/sql1999.pdf#page=56[SQL-99 4.8]. The basic syntax is as follows:
 
 [source,ebnf]
 ----
@@ -80,8 +73,6 @@ For a complete list of the SQL-99 builtins, see section xref:https://web.cecs.pd
 
 === Q3. What is SPECIFIC?
 
-NOTE: Incomplete
-
 The "SPECIFIC" is a unique identifier for this operator. For now, I am thinking of this as the operator name. I have
 generated specific names for the PartiQL builtins with some string mangling. The rule is to combine the function name,
 input types, and output type joining with double underscore. The input types are joined with a single underscore.
@@ -101,8 +92,6 @@ CREATE FUNCTION "LTE" (
 NOTE: `foo(x,y) -> z` mangled to `FOO\__X_Y__Z`.
 
 === Q4. What are type coercions?
-
-NOTE: Incomplete
 
 Type coercions are the implicit casting behavior defined by SQL. The planner is responsible for leverage coercions to
 resolve functions and inserting an explicit cast operator where the coercion was matched.
@@ -142,25 +131,30 @@ NOTE: Incomplete
 
 NOTE: Incomplete
 
-=== Q7. How are functions evaluated?
+=== Q7. How are NULL and MISSING handled in functions?
 
-NOTE: Incomplete
+Function evaluation is determined by the method specification, see xref:https://web.cecs.pdx.edu/~len/sql1999.pdf#page=915[21.24 Method Specifications Base Table]. The important specification here is the property `IS_NULL_CALL`.
 
-=== Q8. Are function arguments ever NULL or MISSING?
+*If a function is a _null-call_, it is evaluated as follows:*
 
-NOTE: Incomplete
+. First, evaluated all arguments.
+. If any argument is NULL, return NULL.
+. If any argument is MISSING, return MISSING in _permissive mode_ and error in _strict mode_.
+. Finally, invoke the resolved operator with all the non-null values from the evaluated arguments.
 
-=== Q9. Do functions ever return NULL or MISSING?
+> A null-call function is an SQL-invoked function that is defined to return the null value if any of its
+input arguments is the null value. A null-call function is an SQL-invoked function whose <null-call
+clause> specifies ‘RETURNS NULL ON NULL INPUT’.
 
-NOTE: Incomplete
+*If a function is NOT a _null-call_, it is evaluated as follows:*
 
-=== Q10. Are operator arguments ever NULL or MISSING?
+. First, evaluated all arguments.
+. If in _strict mode_ evaluation and any argument is MISSING, then error.
+. Finally, invoke the resolved operator with all values from the evaluated arguments.
 
-NOTE: Incomplete
+SQL functions are called on NULL input by default.
 
-=== Q11. Do operators ever return NULL or MISSING?
-
-NOTE: Incomplete
+>  If <null-call clause> is not specified, then CALLED ON NULL INPUT is implicit — SQL-99 11.49.f
 
 === Appendix I — Type Coercion Table
 
