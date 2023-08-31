@@ -7,9 +7,10 @@ This document gives answer to following questions informed by PartiQL Kotlin's i
 . How do we define functions and operators?
 . What is SPECIFIC?
 . What are type coercions?
-. What is type precedence?
+. What is the operator precedence?
 . How are functions resolved?
 . How are NULL and MISSING handled in functions?
+. How are ANY parameters matched?
 
 == Proposals
 
