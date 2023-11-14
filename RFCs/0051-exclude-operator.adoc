@@ -13,7 +13,7 @@ This doc defines the `EXCLUDE` binding tuple operator used to omit nested values
 
 == Motivation
 
-SQL users often use `SELECT *` to project all of the columns a table. There's frequently a use case in which a user would like to project all the columns from a table other than a subset of the columns (see https://stackoverflow.com/q/729197[slack overflow question]). There are some workarounds in some database systems that are somewhat inefficient (e.g. creating a new table and dropping a select column), but it can be helpful to have a dedicated syntax to filter out certain columns. Prior art lists out a few databases that provide some version of this column filtering.
+SQL users often use `SELECT *` to project all of the columns of a table. There is frequently a use case in which a user would like to project all the columns from a table other than a subset of the columns (see https://stackoverflow.com/q/729197[slack overflow question]). There are workarounds in some database systems that are somewhat inefficient (e.g. creating a new table and dropping a specific column), but it can be helpful to have a dedicated syntax to filter out certain columns. <<Prior art>> lists out a few databases that provide some version of this column filtering.
 
 There is a similar need among PartiQL users to exclude certain nested fields from semi-structured data. PartiQL supports `SELECT *` to project all of the field of a binding tuple. Without `EXCLUDE`, if a user wanted to omit one field from this projection, they would need to list out all of the projection fields or perform some intricate combination of `PIVOT` and ``UNPIVOT``s.
 
@@ -64,7 +64,7 @@ FROM
 <right bracket> ::= "]"
 ----
 
-NOTE: Despite their similar syntax and naming, ``<exclude path>``s are different from PartiQL path expressions
+NOTE: Despite their similar syntax and naming, ``<exclude path>``s are different from PartiQL path expressions.
 
 === Terminology
 * For an `<exclude path>`, we refer to the leftmost identifier as the 'root' and the other exclude path components as 'steps'.
@@ -85,7 +85,7 @@ e.g. tableFoo.a[1].*[*].b['c']
 
 === Out of scope / assumptions
 
-* We restrict `<exclude path>` non-wildcard steps to be identifiers as well as int and string literals. Thus these paths are statically known. We can decide in the future whether to add other exclude paths (e.g. expressions) if a use case arises.
+* We restrict tuple attribute exclude steps to use string literals and collection index exclude steps to use int literals. Thus `<exclude paths>` are statically known. We can decide in the future whether to add other exclude paths (e.g. expressions) if a use case arises.
 * If sufficient schema is present and the path can be resolved, we assume the root of an `EXCLUDE` path can be omitted. The variable resolution rules follow what is already included in the PartiQL specification.
 * We require that every fully-qualified `<exclude path>` contain a root and at least one step. If a use case arises to exclude a binding tuple variable, then this functionality can be added.
 * S-expressions are part of the Ion type system. footnote:[https://amazon-ion.github.io/ion-docs/docs/spec.html#sexp] Since PartiQL's type system is a superset over the Ion types, PartiQL should support s-expression types and values. Since the current PartiQL specification does not formally define s-expressions operations, we consider the definition of collection index and wildcard steps on s-expressions as out-of-scope for this RFC.
@@ -99,20 +99,37 @@ For each `<exclude path>` `p=root~p~s~1~...s~m~`, we compare it with all other `
 NOTE: The following rules assume `root~p~=root~q~`.
 
 .Subsumption rules
-Rule 1.a::
+[[anchor-1a]] Rule 1.a::
     If `m ≥ n` and `s~1~...s~m~=t~1~...t~m~`, `q` subsumes `p`. Put another way if `p` has at least as many steps as `q` and the steps up to ``q``'s length are equivalent, `q` subsumes `p`.
 
 Otherwise, there must be some step at which `p` and `q` diverge. Let's call this index `i`.
 
-Rule 1.b::
+[[anchor-1b]] Rule 1.b::
     If `s~i~` is a tuple attribute and `t~i~` is a tuple wildcard and `t~i+1~...t~n~` subsumes `s~i+1~...t~n~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
-Rule 1.c::
+[[anchor-1c]] Rule 1.c::
     If `s~i~` is a collection index and `t~i~` is a collection wildcard and `t~i+1~...t~n~` subsumes `s~i+1~...s~m~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
-Rule 1.d::
+[[anchor-1d]] Rule 1.d::
     If `s~i~` is a case-sensitive tuple attribute and `t~i~` is a case-insensitive tuple attribute and `t~i+1~...t~n` subsumes `s~i+1~...s~m` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
 
-===== Subsumption Examples:
-TODO: put in table or list form and link rules
+.Subsumption Examples
+[options="header,footer"]
+|=======================
+|Exclude Path `p`|Exclude Path `q`|Notes
+|`s.a`        |`t.a`       |No subsumption rules apply (roots differ)
+|`t.a`        |`t.b`       |No subsumption rules apply
+|`t.a.b.c`    |`t.a.*.d`   |No subsumption rules apply
+|`t.a.b.c`    |`t.a.b.c`   |`q` subsumes `p` (by <<anchor-1a, 1.a>>)
+|`t.a.b.c`    |`t.a.b`     |`q` subsumes `p` (by <<anchor-1a, 1.a>>)
+|`t.a.b.c`    |`t.a.b.*`   |`q` subsumes `p` (by <<anchor-1b, 1.b>> then  <<anchor-1a, 1.a>>)
+|`t.a.b.c`    |`t.a.*.c`   |`q` subsumes `p` (by <<anchor-1b, 1.b>> then <<anchor-1a, 1.a>>)
+|`t.a.b[1]`   |`t.a.b`     |`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1a, 1.a>>)
+|`t.a.b[1]`   |`t.a.b[*]`  |`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1a, 1.a>>)
+|`t.a.b[1].c` |`t.a.b[1]`  |`q` subsumes `p` (by <<anchor-1a, 1.a>>)
+|`t.a.b[1].c` |`t.a.b[*].c`|`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1a, 1.a>>)
+|`t.a.b[1].c` |`t.a.b[*]`  |`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1a, 1.a>>)
+|`t.a."b"`    |`t.a.b`     |`q` subsumes `p` (by <<anchor-1d, 1.d>> then <<anchor-1a, 1.a>>)
+|`t.a."b".c`  |`t.a.b.c`   |`q` subsumes `p` (by <<anchor-1d, 1.d>> then <<anchor-1a, 1.a>>)
+|=======================
 
 ---
 We first illustrate the rewrite rule for a single `EXCLUDE` path and then explain the syntax rewrite for multiple exclude paths.
@@ -120,6 +137,8 @@ We first illustrate the rewrite rule for a single `EXCLUDE` path and then explai
 ==== Step 2 (single): rewrite a single `EXCLUDE` path
 
 To rewrite a single `EXCLUDE` path with `n` steps, `p=r.s~1~...s~n~`, we move the clauses other than the `SELECT`/`PIVOT` into a subquery, which will `EXCLUDE` the binding tuple values at the path `p`. This subquery essentially reconstructs the binding tuple of the other clauses using a `SELECT VALUE` struct to project back the binding tuple variables. All of the variables created from the other clauses not matching the `EXCLUDE` root `r` will use the identity function (e.g. binding tuple variable `foo` will have attribute `'foo'` and value `foo` in the `SELECT VALUE` struct). For the variable matching the `EXCLUDE` path root `r`, we apply the following rewrite rules to define ``r``'s value within the `SELECT VALUE` struct. If there is no such variable matching `EXCLUDE` path root `r`, the `EXCLUDE` path will not alter any of the binding tuple values. Hence, no rewrite rule is applied.
+
+If the other clauses includes an `ORDER BY`, we convert the top-level query back into a list by adding a position variable (i.e. `AT` clause) along with an `ORDER BY` over that position variable.
 
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -137,6 +156,11 @@ FROM (
     <from clause>
     <other clauses>
 )
+[   -- Include conversion back to list if `ORDER BY` present in `<other clauses>`
+    -- Assume `topLevelTbl` and `idx` are fresh variables
+    AS topLevelTbl AT idx
+    ORDER BY idx
+]
 ----
 
 
@@ -316,6 +340,11 @@ FROM (
     <from clause>
     <other clauses>
 )
+[   -- Include conversion back to list if `ORDER BY` present in `<other clauses>`
+    -- Assume `topLevelTbl` and `idx` are fresh variables
+    AS topLevelTbl AT idx
+    ORDER BY idx
+]
 ----
 Like single path rewriting, we create a nested `CASE` expression for each step. However, for multiple paths, we look at all the paths in parallel and process the steps at the same level. For the following, let `i=1,...,z` where `z` is the length of the longest exclude path. The nested `CASE` expressions for all `i` are created as before:
 
@@ -1249,11 +1278,11 @@ Output:
 SELECT *
 EXCLUDE t.a
 FROM <<
-    { 'a': 1, 'b': 11, 'c': 111 },
-    { 'a': 2, 'b': 22, 'c': 222 },
     { 'a': 3, 'b': 33, 'c': 333 },  -- kept
+    { 'a': 2, 'b': 22, 'c': 222 },
     { 'a': 4, 'b': 44, 'c': 444 },  -- kept
-    { 'a': 5, 'b': 55, 'c': 555 }
+    { 'a': 5, 'b': 55, 'c': 555 },
+    { 'a': 1, 'b': 11, 'c': 111 }
 >> AS t
 ORDER BY a
 LIMIT 2
@@ -1263,7 +1292,7 @@ OFFSET 2
 Rewritten query:
 [source,partiql,subs="+{markup-in-source}"]
 ----
-SELECT *
+SELECT t.*
 FROM (
     SELECT VALUE {
         't': 
@@ -1275,16 +1304,17 @@ FROM (
             END
     }
     FROM <<
-        { 'a': 1, 'b': 11, 'c': 111 },
-        { 'a': 2, 'b': 22, 'c': 222 },
         { 'a': 3, 'b': 33, 'c': 333 },  -- kept
+        { 'a': 2, 'b': 22, 'c': 222 },
         { 'a': 4, 'b': 44, 'c': 444 },  -- kept
-        { 'a': 5, 'b': 55, 'c': 555 }
+        { 'a': 5, 'b': 55, 'c': 555 },
+        { 'a': 1, 'b': 11, 'c': 111 }
     >> AS t
     ORDER BY a
     LIMIT 2
     OFFSET 2
-)
+) AS topLevelTbl AT idx
+ORDER BY idx
 ----
 
 Output:
