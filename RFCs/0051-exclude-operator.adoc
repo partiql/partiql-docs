@@ -15,7 +15,7 @@ This doc defines the `EXCLUDE` binding tuple operator used to omit nested values
 
 SQL users often use `SELECT *` to project all of the columns of a table. There is frequently a use case in which a user would like to project all the columns from a table other than a subset of the columns (see https://stackoverflow.com/q/729197[slack overflow question]). There are workarounds in some database systems that are somewhat inefficient (e.g. creating a new table and dropping a specific column), but it can be helpful to have a dedicated syntax to filter out certain columns. <<Prior art>> lists out a few databases that provide some version of this column filtering.
 
-There is a similar need among PartiQL users to exclude certain nested fields from semi-structured data. PartiQL supports `SELECT *` to project all of the field of a binding tuple. If a user wanted to omit one field from this projection, they would need to list out all of the projection fields or perform some intricate combination of `PIVOT` and ``UNPIVOT``s.
+There is a similar need among PartiQL users to exclude certain nested fields from semi-structured data. PartiQL supports `SELECT *` to project all of the fields of a binding tuple. If a user wanted to omit one field from this projection, they would need to list out all of the projection fields or perform some intricate combination of `PIVOT` and ``UNPIVOT``s.
 
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -33,15 +33,15 @@ FROM
 
 [source,ebnf]
 ----
-<sfw_query> ::=
+<sfw query> ::=
     <select clause>
     <exclude clause>?  (* NEW *)
     <from clause>
-    (* other clauses from <sfw_query> in PartiQL spec figure 3 *)
+    (* other clauses from <sfw query> in PartiQL spec figure 3 *)
 
-<fws_query> ::=
+<fws query> ::=
     <from clause>
-    (* other clauses same as fws_query *)
+    (* other clauses same as fws query *)
     <exclude clause>?  (* NEW *)
     <select clause>
     
@@ -64,7 +64,7 @@ FROM
 <right bracket> ::= "]"
 ----
 
-NOTE: Despite their similar syntax and naming, ``<exclude path>``s are different from PartiQL path expressions.
+NOTE: Despite their similar syntax and naming, ``<exclude path>``s are different than PartiQL path expressions.
 
 === Terminology
 * For an `<exclude path>`, we refer to the leftmost identifier as the 'root' and the other exclude path components as 'steps'.
@@ -143,11 +143,13 @@ If the other clauses include an `ORDER BY`, we convert the top-level query back 
 
 [source,partiql,subs="+{markup-in-source}"]
 ----
+-- Original query:
 <select clause>
 EXCLUDE r.s~1~...s~n~
 <from clause>
 <other clauses>
 
+-- Rewritten to:
 <select clause>
 FROM (
     SELECT VALUE {
@@ -165,7 +167,7 @@ FROM (
 ----
 
 
-The main idea for rewriting the `EXCLUDE` steps `s~1~,...,s~n~` is to create a nested `CASE` expression for each step, whereby the nested `CASE` expressions for `s~1~,...,s~n-1~` unnest the input binding tuple and the final `CASE` expression for `s~n~` (i.e. the final step) omits the desired struct field(s) or collection index(es). Every exclude step has an expected type to process during evaluation. Tuple attribute and wildcard exclude steps expect a struct. Whereas a collection index expects a list and a collection wildcard expects a list or bag. The `CASE` expression at each level `i` recreates this expected type by including a `WHEN` branch based on the expected type. Each `CASE` expression will include an `ELSE` branch which outputs the previous level's identifier. This set of branches ensures that at evaluation time, if there is a type mismatch (e.g. evaluation value is a list while the exclude step is a tuple attribute), there is no evaluation error and the previous level's value is returned through the `ELSE` branch. This behavior applies to both the permissive and strict typing modes.
+The main idea for rewriting the `EXCLUDE` steps `s~1~,...,s~n~` is to create a nested `CASE` expression for each step, whereby the nested `CASE` expressions for `s~1~,...,s~n-1~` unnest the input binding tuple and the final `CASE` expression for `s~n~` (i.e. the final step) filters out the desired struct field(s) or collection index(es). Every exclude step has an expected type to process during evaluation. Tuple attribute and wildcard exclude steps expect a struct. Whereas a collection index expects a list and a collection wildcard expects a list or bag. The `CASE` expression at each level `i` recreates this expected type by including a `WHEN` branch based on the expected type. Each `CASE` expression will include an `ELSE` branch which outputs the previous level's identifier. This set of branches ensures that at evaluation time, if there is a type mismatch (e.g. evaluation value is a list while the exclude step is a tuple attribute), there is no evaluation error and the previous level's value is returned through the `ELSE` branch. This behavior applies to both the permissive and strict typing modes.
 
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -175,11 +177,11 @@ SELECT VALUE {
     'r':
         CASE
             WHEN ... --  branch(es) dependent on ``s~1~``'s rewrite rule
-                ... -- nested `CASE` expressions for `s~2~...s~n~`
-                    CASE
-                        WHEN ... -- branch(es) dependent on ``s~n~``'s rewrite rule
-                    ELSE <v~n-1~>
-                    END
+                    ... -- nested `CASE` expressions for `s~2~...s~n~`
+                        CASE
+                            WHEN ... -- branch(es) dependent on ``s~n~``'s rewrite rule
+                        ELSE <v~n-1~>
+                        END
             ELSE r
         END
 }
@@ -327,12 +329,15 @@ For multiple `EXCLUDE` paths, we employ a similar idea as the rewrite for a sing
 [source,partiql,subs="+{markup-in-source}"]
 ----
 -- Let `n` represent the number of `EXCLUDE` paths
--- Let `m` represent the number of distinct `EXCLUDE` path roots
+
+-- Original query:
 <select clause>
 EXCLUDE p~1~,...,p~n~
 <from clause>
 <other clauses>
 
+-- Let `m` represent the number of unique `EXCLUDE` path roots
+-- Rewritten to:
 <select clause>
 FROM (
     SELECT VALUE {
@@ -406,13 +411,14 @@ WHEN <v~i-1~> IS STRUCT THEN
         LOWER(<attr~i~>) NOT IN [<case-insensitive tuple attrs with last step i>] -- call `LOWER` on each of the case-insensitive tuple attrs
 ----
 
+=====
 NOTE: If the only applicable path at level `i` is a tuple wildcard and this path is of length `i`, we know there are no other applicable tuple paths by the subsumption rules. In this case, we can just return an empty struct for the `ith` nested `CASE` like <<anchor-3b, rule 3.b>>:
 [source,partiql,subs="+{markup-in-source}"]
 ----
 WHEN <v~i-1~> IS STRUCT THEN
     { }
 ----
-
+=====
 ---
 
 If any of the applicable `EXCLUDE` paths at level `i` have a collection index or wildcard exclude step, then we add the following `WHEN` branches to the `i`^th^ nested `CASE` expression. If the exclude paths at level `i` are all collection index steps, only a `WHEN` branch casing on if the previous level's value `<v~i-1~>` was a list will be added. Otherwise, a `WHEN` branch casing on if `<v~i-1~>` is a bag will also be added. Alike the collection exclude rules defined for single `EXCLUDE` paths, we add a `SELECT VALUE ... FROM` over `<v~i-1~>`.
@@ -459,6 +465,7 @@ WHEN <v~i-1~> IS BAG THEN
     FROM <v~i-1~> AS <v~i~>
 ----
 
+=====
 NOTE: If the only applicable path at level `i` is a collection wildcard and this path is of length `i`, we know there are no other applicable collection paths by the subsumption rules. In this case, we can just return an empty list or bag for the `ith` nested `CASE` like <<anchor-3d, rule 3.d>>:
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -467,6 +474,7 @@ WHEN <v~i-1~> IS LIST THEN
 WHEN <v~i-1~> IS BAG THEN
     <<>>    -- empty bag
 ----
+=====
 
 == Examples
 === Example: tuple attribute as final step
@@ -538,7 +546,7 @@ Output:
 >>
 ----
 
-==== Example: tuple wildcard as final step
+=== Example: tuple wildcard as final step
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT t.*
@@ -604,7 +612,7 @@ Output:
 ----
 
 
-==== Example: tuple wildcard as non-final step
+=== Example: tuple wildcard as non-final step
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT t.*
@@ -667,7 +675,7 @@ Output:
 >>
 ----
 
-==== Example: collection index as final step
+=== Example: collection index as final step
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT t.*
@@ -746,7 +754,7 @@ Output:
 ----
 
 
-==== Example: collection wildcard as final step
+=== Example: collection wildcard as final step
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT t.*
@@ -814,7 +822,7 @@ Output:
 >>
 ----
 
-==== Example: 
+=== Example: collection index as non-final step
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT t.*
@@ -823,7 +831,7 @@ FROM <<
     {
         'a': [
             { 'field_x': 0, 'field_y': 'zero' },
-            { 'field_x': 1, 'field_y': 'one' },
+            { 'field_x': 1, 'field_y': 'one' },  -- only `'field_x': 1` is removed
             { 'field_x': 2, 'field_y': 'two' }
         ],
         'foo': 'bar'
@@ -900,7 +908,7 @@ Output:
 ----
 
 
-==== Example: collection wildcard as non-final step
+=== Example: collection wildcard as non-final step
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT t.*
@@ -987,7 +995,7 @@ Output:
 >>
 ----
 
-==== Example: multiple binding tuples with `JOIN`
+=== Example: multiple binding tuples with `JOIN`
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT *
@@ -1057,7 +1065,7 @@ Output:
 >>
 ----
 
-==== Example: EXCLUDE over `FROM UNPIVOT`
+=== Example: EXCLUDE over `FROM UNPIVOT`
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT v, attr
@@ -1120,7 +1128,7 @@ Output:
 ----
 
 
-==== Example: EXCLUDE w/ `ORDER BY`, `LIMIT`, `OFFSET`
+=== Example: EXCLUDE w/ `ORDER BY`, `LIMIT`, `OFFSET`
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT *
@@ -1180,7 +1188,7 @@ Output:
 ]
 ----
 
-==== Example: multiple EXCLUDE paths at same level
+=== Example: multiple EXCLUDE paths at same level
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT * EXCLUDE t."a", t['b'], t.d, t.e FROM 
@@ -1233,7 +1241,7 @@ Output:
 ----
 
 
-==== Example: multiple EXCLUDE paths at different levels
+=== Example: multiple EXCLUDE paths at different levels
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT * EXCLUDE t.a.a1, t.b FROM 
@@ -1309,7 +1317,7 @@ Output:
 >>
 ----
 
-==== Example: EXCLUDE with different FROM source bindings
+=== Example: EXCLUDE with different FROM source bindings
 [source,partiql"]
 ----
 SELECT *
@@ -1447,7 +1455,7 @@ We choose to model `EXCLUDE` as a syntactic rewrite over existing clauses (e.g. 
 
 Why does `EXCLUDE` not give an evaluation error when an exclude path does not remove anything? Or on data type mismatch (e.g. tuple attribute exclude step on collection)?::
 
-We have opted to not error at evaluation time when `EXCLUDE` does not omit any values or in data type mismatch cases.  It is very possible in the schemaless, semi-structured data domain that our data is missing some fields or has different structures. The idea here is that `EXCLUDE` will guarantee that all values at the exclude path will be omitted from the output binding tuple. This can enable use cases such as <<Example: EXCLUDE with different FROM source bindings>> in which the data we wish to exclude is nested within different structs and containers.
+We have opted to not error at evaluation time when `EXCLUDE` does not omit any values or in data type mismatch cases.  It is very possible in the schemaless, semi-structured data domain that our data is missing some fields or has different structures. The idea here is that `EXCLUDE` will guarantee that all values at the exclude path will be omitted from the output binding tuple. This can enable use cases such as <<Example: EXCLUDE with different FROM source bindings>> in which the data we wish to exclude is nested within a heterogeneous set of structs and containers.
 +
 A future RFC could opt to give a warning/error in these cases when schema is present and we know at static time that an `EXCLUDE` path will not omit values. See <<Unresolved questions>> for more discussion on schema.
 
