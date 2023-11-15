@@ -105,11 +105,11 @@ NOTE: The following rules assume `root~p~=root~q~`.
 Otherwise, there must be some step at which `p` and `q` diverge. Let's call this index `i`.
 
 [[anchor-1b]] Rule 1.b::
-    If `s~i~` is a tuple attribute and `t~i~` is a tuple wildcard and `t~i+1~...t~n~` subsumes `s~i+1~...t~n~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
+    If `s~i~` is a tuple attribute and `t~i~` is a tuple wildcard and `t~i+1~...t~n~` subsumes `s~i+1~...s~n~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
 [[anchor-1c]] Rule 1.c::
     If `s~i~` is a collection index and `t~i~` is a collection wildcard and `t~i+1~...t~n~` subsumes `s~i+1~...s~m~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
 [[anchor-1d]] Rule 1.d::
-    If `s~i~` is a case-sensitive tuple attribute and `t~i~` is a case-insensitive tuple attribute and `t~i+1~...t~n` subsumes `s~i+1~...s~m` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
+    If `s~i~` is a case-sensitive tuple attribute and `t~i~` is a case-insensitive tuple attribute and `t~i+1~...t~n~` subsumes `s~i+1~...s~m~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
 
 .Subsumption Examples
 [options="header,footer"]
@@ -122,7 +122,7 @@ Otherwise, there must be some step at which `p` and `q` diverge. Let's call this
 |`t.a.b.c`    |`t.a.b`     |`q` subsumes `p` (by <<anchor-1a, 1.a>>)
 |`t.a.b.c`    |`t.a.b.*`   |`q` subsumes `p` (by <<anchor-1b, 1.b>> then  <<anchor-1a, 1.a>>)
 |`t.a.b.c`    |`t.a.*.c`   |`q` subsumes `p` (by <<anchor-1b, 1.b>> then <<anchor-1a, 1.a>>)
-|`t.a.b[1]`   |`t.a.b`     |`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1a, 1.a>>)
+|`t.a.b[1]`   |`t.a.b`     |`q` subsumes `p` (by <<anchor-1a, 1.a>>)
 |`t.a.b[1]`   |`t.a.b[*]`  |`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1a, 1.a>>)
 |`t.a.b[1].c` |`t.a.b[1]`  |`q` subsumes `p` (by <<anchor-1a, 1.a>>)
 |`t.a.b[1].c` |`t.a.b[*].c`|`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1a, 1.a>>)
@@ -138,7 +138,7 @@ We first illustrate the rewrite rule for a single `EXCLUDE` path and then explai
 
 To rewrite a single `EXCLUDE` path with `n` steps, `p=r.s~1~...s~n~`, we move the clauses other than the `SELECT`/`PIVOT` into a subquery, which will `EXCLUDE` the binding tuple values at the path `p`. This subquery essentially reconstructs the binding tuple of the other clauses using a `SELECT VALUE` struct to project back the binding tuple variables. All of the variables created from the other clauses not matching the `EXCLUDE` root `r` will use the identity function (e.g. binding tuple variable `foo` will have attribute `'foo'` and value `foo` in the `SELECT VALUE` struct). For the variable matching the `EXCLUDE` path root `r`, we apply the following rewrite rules to define ``r``'s value within the `SELECT VALUE` struct. If there is no such variable matching `EXCLUDE` path root `r`, the `EXCLUDE` path will not alter any of the binding tuple values. Hence, no rewrite rule is applied.
 
-If the other clauses includes an `ORDER BY`, we convert the top-level query back into a list by adding a position variable (i.e. `AT` clause) along with an `ORDER BY` over that position variable.
+If the other clauses include an `ORDER BY`, we convert the top-level query back into a list by adding a position variable (i.e. `AT` clause) along with an `ORDER BY` over the position variable.
 
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -187,7 +187,7 @@ SELECT VALUE {
 .Rewrite rule 2: `EXCLUDE` steps `s~1~,...,s~n-1~`
 For this rewrite rule definition, let `<v~i-1~>` be the identifier created from the previous exclude step (or `r` if this is the first step). For some exclude step `s~i~` that is not the last step, we case on the type of exclude step.
 
-Rule 2.a.i::
+[[anchor-2ai]] Rule 2.a.i::
     If `s~i~` is a case-sensitive tuple attribute exclude step (e.g. `."foo"`), where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -201,7 +201,7 @@ WHEN <v~i-1~> IS STRUCT THEN
     AT <attr~i~>
     FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
 ----
-Rule 2.a.ii::
+[[anchor-2aii]] Rule 2.a.ii::
     If `s~i~` is a case-insensitive tuple attribute exclude step (e.g. `.foo`), where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -217,7 +217,7 @@ WHEN <v~i-1~> IS STRUCT THEN
 ----
 NOTE: This is essentially the same as Rule 2.a.i but wraps the inner `CASE WHEN` comparison between `<attr~i~>` and `<s~i~>` with calls to `LOWER`.
 
-Rule 2.b::
+[[anchor-2b]] Rule 2.b::
     If `s~i~` is a tuple wildcard exclude step, where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -225,9 +225,9 @@ WHEN <v~i-1~> IS STRUCT THEN
     PIVOT 
         -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
     AT <attr~i~>
-    FROM UNPIVOT <v~i-1~> AS <vi> AT <attr~i~>
+    FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
 ----
-Rule 2.c::
+[[anchor-2c]] Rule 2.c::
     If `s~i~` is a collection index exclude step, where `<v~i~>` and `<idx>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -240,14 +240,14 @@ WHEN <v~i-1~> IS LIST THEN
     FROM <v~i-1~> AS <v~i~> AT <idx>
     ORDER BY <idx>
 ----
-Rule 2.d::
+[[anchor-2d]] Rule 2.d::
     If `s~i~` is a collection wildcard exclude step, where `<v~i~>` and `<idx>` are fresh variables, add the following `WHEN` branches to the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
 WHEN <v~i-1~> IS LIST THEN
     SELECT VALUE
         -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
-    FROM <v~i-1~> AS <vi> AT <idx>
+    FROM <v~i-1~> AS <v~i~> AT <idx>
     ORDER BY <idx>
 WHEN <v~i-1~> IS BAG THEN
     SELECT VALUE
@@ -256,7 +256,7 @@ WHEN <v~i-1~> IS BAG THEN
 ----
 
 .Rewrite rule 3: `EXCLUDE` step `s~n~`
-The last step of a single `EXCLUDE` path rewrite follows a similar structure as rewrite rules for steps `s~1~...s~n-1~` by adding a `CASE ... ELSE END`. Let `<v~n-1~>` be the identifier created from the previous exclude step (or `r` if `n=1``).
+The last step of a single `EXCLUDE` path rewrite follows a similar structure as rewrite rules for steps `s~1~...s~n-1~` by adding a `CASE ... ELSE END`. Let `<v~n-1~>` be the identifier created from the previous exclude step (or `r` if `n=1`).
 
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -266,44 +266,44 @@ CASE
 END
 ----
 
-Similarly to rule 2, we case on the type of exclude step to determine which `WHEN` branch(es) to add to the `n`^th^ nested `CASE` expression.
+Similar to rule 2, we case on the type of exclude step to determine which `WHEN` branch(es) to add to the `n`^th^ nested `CASE` expression.
 
-Rule 3.a.i::
-    If the last step is a case-sensitive tuple attribute exclude step, where `<v~n~>` and `<attr~new~>` are fresh variables, we add the following `WHEN` branch:
+[[anchor-3ai]] Rule 3.a.i::
+    If the last step is a case-sensitive tuple attribute exclude step, where `<v~n~>` and `<attr~n~>` are fresh variables, we add the following `WHEN` branch:
 [source,partiql,subs="+{markup-in-source}"]
 ----
 WHEN <v~n-1~> IS STRUCT THEN
-    PIVOT <v~n~> AT <attr~new~>
-    FROM UNPIVOT <v~n-1~> AS <v~n~> AT <attr~new~>
-    WHERE <attr~new~> NOT IN [ <s~i~> ]
+    PIVOT <v~n~> AT <attr~n~>
+    FROM UNPIVOT <v~n-1~> AS <v~n~> AT <attr~n~>
+    WHERE <attr~n~> NOT IN [ <s~n~> ]
 ----
-Rule 3.a.ii::
-    If the last step is a case-insensitive tuple attribute exclude step, where `<v~n~>` and `<attr~new~>` are fresh variables, we add the following `WHEN` branch:
+[[anchor-3aii]] Rule 3.a.ii::
+    If the last step is a case-insensitive tuple attribute exclude step, where `<v~n~>` and `<attr~n~>` are fresh variables, we add the following `WHEN` branch:
 [source,partiql,subs="+{markup-in-source}"]
 ----
 WHEN <v~n-1~> IS STRUCT THEN
-    PIVOT <v~n~> AT <s~i~>
-    FROM UNPIVOT <v~n-1~> AS <v~n~> AT <attr~new~>
-    WHERE LOWER( <attr~new~> ) NOT IN [ LOWER(<s~i~>) ] -- difference w/ 3.a.ii is `LOWER` call on `<attr~new~>` and `<s~i~>`
+    PIVOT <v~n~> AT <s~n~>
+    FROM UNPIVOT <v~n-1~> AS <v~n~> AT <attr~n~>
+    WHERE LOWER( <attr~n~> ) NOT IN [ LOWER(<s~n~>) ] -- difference w/ 3.a.i is `LOWER` call on `<attr~n~>` and `<s~n~>`
 ----
-Rule 3.b::
+[[anchor-3b]] Rule 3.b::
     If the last step is a tuple wildcard exclude step, we add the following `WHEN` branch:
 [source,partiql,subs="+{markup-in-source}"]
 ----
 WHEN <v~n-1~> IS STRUCT THEN
     { }     -- empty struct
 ----
-Rule 3.c::
+[[anchor-3c]] Rule 3.c::
     If the last step is a collection index exclude step, where `<v~n~>` and `<idx>` are fresh variables, we add the following `WHEN` branch:
 [source,partiql,subs="+{markup-in-source}"]
 ----
 WHEN <v~n-1~> IS LIST THEN
     SELECT VALUE <v~n~>
     FROM <v~n-1~> AS <v~n~> AT <idx>
-    WHERE <idx> NOT IN [<s~i~>]
+    WHERE <idx> NOT IN [<s~n~>]
     ORDER BY <idx>
 ----
-Rule 3.d::
+[[anchor-3d]] Rule 3.d::
     If the last step is a collection wildcard exclude step, we add the following two `WHEN` branches:
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -315,7 +315,7 @@ WHEN <v~n-1~> IS BAG THEN
 
 Based on what the defined rules for single `EXCLUDE` path rewrites, we will now cover how multiple paths are to be rewritten.
 
-== Step 2 (multiple): rewriting multiple `EXCLUDE` paths
+==== Step 2 (multiple): rewriting multiple `EXCLUDE` paths
 
 TODO: inclusion of tuple + collection wildcard at end of path explanation
 
@@ -323,6 +323,7 @@ For multiple `EXCLUDE` paths, we employ a similar idea as the rewrite for a sing
 
 [source,partiql,subs="+{markup-in-source}"]
 ----
+-- Let `n` represent the number of `EXCLUDE` paths
 -- Let `m` represent the number of distinct `EXCLUDE` path roots
 <select clause>
 EXCLUDE p~1~,...,p~n~
@@ -346,11 +347,10 @@ FROM (
     ORDER BY idx
 ]
 ----
-Like single path rewriting, we create a nested `CASE` expression for each step. However, for multiple paths, we look at all the paths in parallel and process the steps at the same level. For the following, let `i=1,...,z` where `z` is the length of the longest exclude path. The nested `CASE` expressions for all `i` are created as before:
+Like single path rewriting, we create a nested `CASE` expression for each step. However, for multiple paths, we look at all the paths in parallel and process the steps at the same level. For the following, let `i=1,...,z` where `z` is the length of the longest exclude path. The nested `CASE` expressions for all `i` are created as before. For the following, let `<v~i-1~>` be the identifier from the previous level (or the root identifier if `i = 1`).
 
 [source,partiql,subs="+{markup-in-source}"]
 ----
--- Let `<v~i-1~` be the identifier from the previous level (or the root identifier if `i = 1`)
 CASE
     WHEN <v~i-1~> IS STRUCT THEN
         ... -- apply tuple attr and wildcard path rewrite (rule 4.a)
@@ -370,20 +370,23 @@ We divide the set of applicable `EXCLUDE` paths into two subsets:
 1. paths of length `i` (i.e. final step is `i`)
 2. paths of length greater than `i` (i.e. have additional steps)
 
-If there are any `EXCLUDE` paths of length `i`, then similar to Rule 3.a.i and Rule 3.a.ii, we add a `WHERE` clause to filter out those fields. The fields to exclude will be grouped together based on if the tuple attribute exclude step was case sensitive or case-insensitive.
+If there are any `EXCLUDE` paths of length `i`, then similar to <<anchor-3ai, Rule 3.a.i>> and <<anchor-3aii, Rule 3.a.ii>>, we add a `WHERE` clause to filter out those fields. The fields to exclude will be grouped together based on if the tuple attribute exclude step was case sensitive or case-insensitive.
 
-If there are any `EXCLUDE` paths of length greater than `i`, then similar to Rule 2.a.i and Rule 2.a.ii, we add a `CASE` expression within the `PIVOT`. This `CASE` expression within the `PIVOT` will define a `WHEN` branch for each of the unique tuple attribute steps. Each of these `WHEN` branches will apply the rewrite rules for the exclude paths that have additional steps and equivalent tuple attribute or tuple wildcard. An `ELSE` branch will be added to this `CASE` expression which will apply the rewrite rules for the exclude paths with additional steps and tuple wildcard.
+If there are any `EXCLUDE` paths of length greater than `i`, then similar to <<anchor-2ai, Rule 2.a.i>> and <<anchor-2aii, Rule 2.a.ii>>, we add a `CASE` expression within the `PIVOT`. This `CASE` expression within the `PIVOT` will define a `WHEN` branch for each of the unique tuple attribute steps. Each of these `WHEN` branches will apply the rewrite rules for the exclude paths that have additional steps and equivalent tuple attribute or tuple wildcard. An `ELSE` branch will be added to this `CASE` expression which will apply the rewrite rules for the exclude paths with additional steps and tuple wildcard.
 [source,partiql,subs="+{markup-in-source}"]
 ----
+-- Let `k` represent the number of unique exclude tuple attrs for exclude paths of length
+-- greater than `i`.
+-- `<v~i~>` and `<attr~i~>` are fresh variables
 WHEN <v~i-1~> IS STRUCT THEN
     PIVOT (
         CASE
-            WHEN <attr~new~> = <exclude path tuple attr~1~> THEN
+            WHEN <attr~i~> = <exclude path tuple attr~1~> THEN
                 -- Apply rewrite rules for exclude paths with
                 -- length > i AND
                 -- ith step of tuple attr~1~ or tuple wildcard
               ⋮
-            WHEN <attr~new~> = <exclude path tuple attr~k~> THEN
+            WHEN <attr~i~> = <exclude path tuple attr~k~> THEN
                 -- Apply rewrite rules for exclude paths with
                 -- length > i
                 -- ith step of tuple attr~k~ or tuple wildcard
@@ -392,12 +395,12 @@ WHEN <v~i-1~> IS STRUCT THEN
                 -- length > i AND
                 -- tuple wildcard at ith step
         END
-    ) AT <attr~new~>
-    FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~new~>
+    ) AT <attr~n~>
+    FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
     WHERE 
-        <attr~new~> NOT IN [<case-sensitive tuple attrs with last step i>]
+        <attr~i~> NOT IN [<case-sensitive tuple attrs with last step i>]
         AND
-        LOWER(<attr~new~>) NOT IN [<case-insensitive tuple attrs with last step i>] -- call `LOWER` on each of the case-insensitive tuple attrs
+        LOWER(<attr~i~>) NOT IN [<case-insensitive tuple attrs with last step i>] -- call `LOWER` on each of the case-insensitive tuple attrs
 ----
 
 If any of the applicable `EXCLUDE` paths at level `i` have a collection index or wildcard exclude step, then we add the following `WHEN` branches to the `i`^th^ nested `CASE` expression. If the exclude paths at level `i` only have a collection index, only a `WHEN` branch casing on if the previous level's value `<v~i-1~>` was a list will be added. Otherwise, a `WHEN` branch casing if `<v~i-1~>` is a bag will also be added. Alike the collection exclude rules defined for single `EXCLUDE` paths, we add a `SELECT VALUE ... FROM` over `<v~i-1~>`.
@@ -408,13 +411,16 @@ We divide the set of applicable `EXCLUDE` paths into two subsets:
 1. paths of length `i` (i.e. final step is `i`)
 2. paths of length greater than `i` (i.e. have additional steps)
 
-If there are any `EXCLUDE` paths of length `i`, then similar to Rule 3.c, we add a `WHERE` clause to filter out those fields. The fields to exclude will be grouped together within a list.
+If there are any `EXCLUDE` paths of length `i`, then similar to <<anchor-3c, Rule 3.c>>, we add a `WHERE` clause to filter out those fields. The fields to exclude will be grouped together within a list.
 
-(Within the `LIST` `WHEN` branch) If there are any `EXCLUDE` paths of length greater than `i`, then similar to Rule 2.c, we add a `CASE` expression within the `SELECT VALUE`. This `CASE` expression within the `PIVOT` will define a `WHEN` branch for each of the unique collection index steps. Each of these `WHEN` branches will apply the rewrite rules for the exclude paths that have additional steps and equivalent collection indexes or collection wildcard. An `ELSE` branch will be added to this `CASE` expression which will apply the rewrite rules for the exclude paths with additional steps and collection wildcard.
+(Within the `LIST` `WHEN` branch) If there are any `EXCLUDE` paths of length greater than `i`, then similar to <<anchor-2c, Rule 2.c>>, we add a `CASE` expression within the `SELECT VALUE ... AT ... ORDER BY`. This `CASE` expression within the `SELECT VALUE` will define a `WHEN` branch for each of the unique collection index steps. Each of these `WHEN` branches will apply the rewrite rules for the exclude paths that have additional steps and equivalent collection indexes or collection wildcard. An `ELSE` branch will be added to this `CASE` expression which will apply the rewrite rules for the exclude paths with additional steps and collection wildcard.
 
 (Within the `BAG` `WHEN` branch, if applicable) We simply have a `FROM` over `<v~i-1~>` with a `SELECT VALUE` that applies the rewrite rules for exclude paths that have additional steps and collection wildcard at level `i`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
+-- Let `k` represent the number of unique exclude collection indexes for exclude paths of length
+-- greater than `i`.
+-- `<v~i~>` and `<attr~i~>` are fresh variables
 WHEN <v~i-1~> IS LIST THEN
     SELECT VALUE
         CASE WHEN <idx> = <exclude path collection idx~1~> THEN
@@ -441,10 +447,6 @@ WHEN <v~i-1~> IS BAG THEN
 ----
 
 === Examples:
-TODO:
-* Numbering of examples
-* Additional examples (if necessary)
-
 ==== Example: tuple attribute as final step
 [source,partiql,subs="+{markup-in-source}"]
 ----
@@ -1039,7 +1041,7 @@ Output:
 ----
 
 ==== Example: EXCLUDE with different FROM source bindings
-[source,partiql,subs="+{markup-in-source}"]
+[source,partiql"]
 ----
 SELECT *
 EXCLUDE t.a[*].bar, t.a.bar, t.a.*.bar  -- EXCLUDE all `bar`
@@ -1139,7 +1141,7 @@ Output:
 ----
 
 
-==== Example: multiple binding tuples with JOIN
+==== Example: multiple binding tuples with `JOIN`
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT *
@@ -1156,7 +1158,7 @@ FROM
 ----
 
 Rewritten query:
-[source,partiql,subs="+{markup-in-source}"]
+[source,partiql"]
 ----
 SELECT foo.*, bar.*
 FROM (
@@ -1209,7 +1211,7 @@ Output:
 >>
 ----
 
-==== Example: 
+==== Example: EXCLUDE over `FROM UNPIVOT`
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT v, attr
@@ -1272,7 +1274,7 @@ Output:
 ----
 
 
-==== Example: EXCLUDE w/ ORDER BY, LIMIT, OFFSET
+==== Example: EXCLUDE w/ `ORDER BY`, `LIMIT`, `OFFSET`
 [source,partiql,subs="+{markup-in-source}"]
 ----
 SELECT *
@@ -1334,17 +1336,49 @@ Output:
 
 == Drawbacks
 
-TODO:
-
-Why should we _not_ do this?
+`EXCLUDE` (or similar clause) is not yet part of any SQL or SQL++ standard. If `EXCLUDE` is added in a future standard, it's possible the syntax and semantics may change.
 
 == Rationale and alternatives
+[qanda]
+In the original spec issue (https://github.com/partiql/partiql-spec/issues/39[partiql-spec#39]), `EXCEPT` was included as the keyword for this clause. Why was the keyword `EXCLUDE` chosen?::
 
-TODO:
+`EXCLUDE` was chosen over `EXCEPT` since `EXCEPT` could be confused with the set/bag operator `EXCEPT`. `EXCLUDE` was also chosen by the SQL++ implementation, AsterixDB, through some similar reasoning:
++
+[quote]
+____
+'EXCLUDE' (used in lieu of 'EXCEPT' to avoid confusion with the set operation)
+____
++
+Also, of the databases sampled that have a similar clause (see <<Prior art>>), more had chosen `EXCLUDE` over `EXCEPT`.
 
-* Why is this design/proposal the best in the space of possible designs?
-* Which other designs/proposals have been considered, and what is the rationale for not choosing them?
-* What is the impact of not doing this?
+Why is `EXCLUDE` modeled as a binding tuple operator as opposed to a value expression?::
+
+We had also considered modeling `EXCLUDE` as a value operation evaluated after the `<select clause>`. Evaluating `EXCLUDE` last could contradict the PartiQL specification's assertion that the `<select clause>` is evaluated last, which may add confusion. There were also some additional edge cases that complicated defining `EXCLUDE` as a value operator. For example, let's look at the following query:
++
+[source,partiql,subs="+{markup-in-source}"]
+SELECT t
+EXCLUDE a
+FROM <<
+    { 'a': 1, 'b': 2}
+>> AS t
++
+For above, we would have expected the exclude path `a` to expand to the fully qualified path `t.a`. But since we're in the value domain and not the binding tuple domain, this expansion would not happen unless other expansions rules were specified over values.
++
+Defining `EXCLUDE` as a binding tuple operation evaluated before the `<select clause>` gives us the flexibility to reuse existing path and variable resolution for the exclude paths.
+
+Why is `EXCLUDE` explained in terms of a syntactic rewrite as opposed to an alternative definition?::
+
+We choose to model `EXCLUDE` as a syntactic rewrite over existing clauses (e.g. `PIVOT`, `UNPIVOT`, `CASE`) as this proves more straightforward to explain as opposed to introducing new functional constructs. In prior revisions of this RFC, we had defined a functional definition of `EXCLUDE`, but this ended up introducing a lot of concepts that are not part of the PartiQL and SQL specifications. The rewrite using existing clauses also aligns with our current operational semantics with respect to not erroring.
+
+Why does `EXCLUDE` not give an evaluation error when an exclude path does not remove anything? Or on data type mismatch (e.g. tuple attribute exclude step on collection)?::
+
+We have opted to not error at evaluation time when `EXCLUDE` does not omit any values or in data type mismatch cases.  It is very possible in the schemaless, semi-structured data world that our data is missing some fields or has different structures. The idea here is that `EXCLUDE` will guarantee that all values at the exclude path will be omitted from the output binding tuple. This can enable use cases such as <<Example: EXCLUDE with different FROM source bindings>> in which the data we wish to exclude is nested within different structs and containers.
++
+A future RFC could opt to give a warning/error in these cases when schema is present and we know at static time that an `EXCLUDE` path will not omit values. See <<Unresolved questions>> for more discussion on schema.
+
+What is the impact of not doing this?::
+
+PartiQL users have frequently asked us for this capability to omit certain nested fields/collection values. Without `EXCLUDE`, this operation can be very cumbersome to write out and prone to errors (e.g. leaving out a field or incorrect nesting of `PIVOT`/`UNPIVOT`s).
 
 == Prior art
 
@@ -1504,9 +1538,18 @@ db.inventory.find( { status: "A" }, { status: 0, instock: 0 } )
 
 == Unresolved questions
 
-TODO:
+[qanda]
+What related issues do you consider out of scope for this RFC that could be addressed in the future independently of the solution that comes out of this RFC::
+This RFC describes ``EXCLUDE``'s behavior during evaluation time without schema. A future RFC could clarify ``EXCLUDE``'s behavior in the presence of schema, including
+* `EXCLUDE` on a tuple attribute that does not exist
+* `EXCLUDE` step on a collection or collection step on a tuple
+* `EXCLUDE` on a collection index out of bounds
+* `EXCLUDE` collection index on a bag
+* `EXCLUDE` on a tuple attribute with duplicates
+* `EXCLUDE` with redundant steps  
 
-* What related issues do you consider out of scope for this RFC that could be addressed in the future independently of the solution that comes out of this RFC?
+NOTE: Currently, the above cases are permitted by the rewrite rules specified in this RFC and do not provide an error. A future RFC could define whether the above cases warrant a different behavior in the presence of schema (e.g. permit or warning or error).
+
 
 == Future possibilities
 
