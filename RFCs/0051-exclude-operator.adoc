@@ -195,7 +195,7 @@ For this rewrite rule definition, let `<v~i-1~>` be the identifier created from 
     If `s~i~` is a case-sensitive tuple attribute exclude step (e.g. `."foo"` or `['foo']`), where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
-WHEN <v~i-1~> IS STRUCT THEN
+WHEN <v~i-1~> IS STRUCT THEN (
     PIVOT (
         CASE 
             WHEN <attr~i~> = <s~i~> THEN
@@ -205,12 +205,13 @@ WHEN <v~i-1~> IS STRUCT THEN
     )
     AT <attr~i~>
     FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
+)
 ----
 [[anchor-2aii]] Rule 2.a.ii::
     If `s~i~` is a case-insensitive tuple attribute exclude step (e.g. `.foo`), where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
-WHEN <v~i-1~> IS STRUCT THEN
+WHEN <v~i-1~> IS STRUCT THEN (
     PIVOT (
         CASE 
             WHEN LOWER(<attr~i~>) = LOWER(<s~i~>) THEN
@@ -220,6 +221,7 @@ WHEN <v~i-1~> IS STRUCT THEN
     )
     AT <attr~i~>
     FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
+)
 ----
 NOTE: This is essentially the same as <<anchor-2ai>> but wraps the inner `CASE WHEN` comparison between `<attr~i~>` and `<s~i~>` with calls to `LOWER`.
 
@@ -227,17 +229,18 @@ NOTE: This is essentially the same as <<anchor-2ai>> but wraps the inner `CASE W
     If `s~i~` is a tuple wildcard exclude step, where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
-WHEN <v~i-1~> IS STRUCT THEN
+WHEN <v~i-1~> IS STRUCT THEN (
     PIVOT 
         -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
     AT <attr~i~>
     FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
+)
 ----
 [[anchor-2c]] Rule 2.c::
     If `s~i~` is a collection index exclude step, where `<v~i~>` and `<idx~i~>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
-WHEN <v~i-1~> IS LIST THEN
+WHEN <v~i-1~> IS LIST THEN (
     SELECT VALUE
         CASE 
             WHEN <idx~i~> = <s~i~> THEN
@@ -246,20 +249,23 @@ WHEN <v~i-1~> IS LIST THEN
         END
     FROM <v~i-1~> AS <v~i~> AT <idx~i~>
     ORDER BY <idx~i~>
+)
 ----
 [[anchor-2d]] Rule 2.d::
     If `s~i~` is a collection wildcard exclude step, where `<v~i~>` and `<idx~i~>` are fresh variables, add the following `WHEN` branches to the `i`^th^ nested `CASE`.
 [source,partiql,subs="+{markup-in-source}"]
 ----
-WHEN <v~i-1~> IS LIST THEN
+WHEN <v~i-1~> IS LIST THEN (
     SELECT VALUE
         -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
     FROM <v~i-1~> AS <v~i~> AT <idx~i~>
     ORDER BY <idx~i~>
-WHEN <v~i-1~> IS BAG THEN
+)
+WHEN <v~i-1~> IS BAG THEN (
     SELECT VALUE
         -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
     FROM <v~i-1~> AS <v~i~>
+)
 ----
 
 .Rewrite rule 3: `EXCLUDE` step `s~n~`
@@ -279,19 +285,21 @@ Similar to <<anchor-2>>, we case on the type of exclude step to determine which 
     If the last step, `s~n~`, is a case-sensitive tuple attribute exclude step, where `<v~n~>` and `<attr~n~>` are fresh variables, we add the following `WHEN` branch:
 [source,partiql,subs="+{markup-in-source}"]
 ----
-WHEN <v~n-1~> IS STRUCT THEN
+WHEN <v~n-1~> IS STRUCT THEN (
     PIVOT <v~n~> AT <attr~n~>
     FROM UNPIVOT <v~n-1~> AS <v~n~> AT <attr~n~>
     WHERE <attr~n~> NOT IN [ <s~n~> ]
+)
 ----
 [[anchor-3aii]] Rule 3.a.ii::
     If the last step, `s~n~`, is a case-insensitive tuple attribute exclude step, where `<v~n~>` and `<attr~n~>` are fresh variables, we add the following `WHEN` branch:
 [source,partiql,subs="+{markup-in-source}"]
 ----
-WHEN <v~n-1~> IS STRUCT THEN
+WHEN <v~n-1~> IS STRUCT THEN (
     PIVOT <v~n~> AT <attr~n~>
     FROM UNPIVOT <v~n-1~> AS <v~n~> AT <attr~n~>
     WHERE LOWER( <attr~n~> ) NOT IN [ LOWER(<s~n~>) ] -- difference w/ 3.a.i is `LOWER` call on `<attr~n~>` and `<s~n~>`
+)
 ----
 [[anchor-3b]] Rule 3.b::
     If the last step, `s~n~`, is a tuple wildcard exclude step, we add the following `WHEN` branch:
@@ -386,7 +394,7 @@ If there are any `EXCLUDE` paths of length greater than `i`, then similar to <<a
 -- Let `k` represent the number of unique exclude tuple attrs for paths of length
 -- greater than `i`.
 -- `<v~i~>` and `<attr~i~>` are fresh variables
-WHEN <v~i-1~> IS STRUCT THEN
+WHEN <v~i-1~> IS STRUCT THEN (
     PIVOT (
         CASE
             WHEN <attr~i~> = <exclude path tuple attr~1~> THEN
@@ -409,6 +417,7 @@ WHEN <v~i-1~> IS STRUCT THEN
         <attr~i~> NOT IN [<case-sensitive tuple attrs with last step i>]
         AND
         LOWER(<attr~i~>) NOT IN [<case-insensitive tuple attrs with last step i>] -- call `LOWER` on each of the case-insensitive tuple attrs
+)
 ----
 
 =====
@@ -439,7 +448,7 @@ If there are any `EXCLUDE` paths of length `i`, then similar to <<anchor-3c, Rul
 -- Let `k` represent the number of unique exclude collection indexes for exclude paths of length
 -- greater than `i`.
 -- `<v~i~>` and `<idx~i~>` are fresh variables
-WHEN <v~i-1~> IS LIST THEN
+WHEN <v~i-1~> IS LIST THEN (
     SELECT VALUE
         CASE 
             WHEN <idx~i~> = <exclude path collection idx~1~> THEN
@@ -459,10 +468,12 @@ WHEN <v~i-1~> IS LIST THEN
     FROM <v~i-1~> AS <v~i~> AT <idx~i~>
     WHERE <idx~i~> NOT IN [<exclude indexes with last step i>]
     ORDER BY <idx~i~>
-WHEN <v~i-1~> IS BAG THEN
+)
+WHEN <v~i-1~> IS BAG THEN (
     SELECT VALUE
         -- Apply rewrite rules for exclude paths with collection wildcard at ith step
     FROM <v~i-1~> AS <v~i~>
+)
 ----
 
 =====
@@ -499,20 +510,22 @@ FROM (
     SELECT VALUE {
         't': 
             CASE 
-                WHEN t IS STRUCT THEN
+                WHEN t IS STRUCT THEN (
                     PIVOT (
                         CASE 
                             WHEN LOWER(attr_1) = LOWER('a') THEN
                                 CASE 
-                                    WHEN v_1 IS STRUCT THEN
+                                    WHEN v_1 IS STRUCT THEN (
                                         PIVOT v_2 AT attr_2
                                         FROM UNPIVOT v_1 AS v_2 AT attr_2
                                         WHERE LOWER(attr_2) NOT IN [LOWER('field_x')]
+                                    )
                                     ELSE v_1
                                 END
                             ELSE v_1
                         END
                     ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+                )
                 ELSE t
             END
     }
@@ -568,7 +581,7 @@ FROM (
     SELECT VALUE {
         't': 
             CASE 
-                WHEN t IS STRUCT THEN
+                WHEN t IS STRUCT THEN (
                     PIVOT (
                         CASE 
                             WHEN LOWER(attr_1) = LOWER('a') THEN
@@ -580,6 +593,7 @@ FROM (
                             ELSE v_1
                         END
                     ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+                )
                 ELSE t
             END
     }
@@ -634,16 +648,18 @@ FROM (
     SELECT VALUE {
         't': 
             CASE 
-                WHEN t IS STRUCT THEN
+                WHEN t IS STRUCT THEN (
                     PIVOT (
                         CASE 
-                            WHEN v_1 IS STRUCT THEN
+                            WHEN v_1 IS STRUCT THEN (
                                 PIVOT v_2 AT attr_2 
                                 FROM UNPIVOT v_1 AS v_2 AT attr_2
                                 WHERE LOWER(attr_2) NOT IN [LOWER('field_x')]
+                            )
                             ELSE v_1
                         END
                     ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+                )
                 ELSE t
             END
     }
@@ -700,16 +716,17 @@ FROM (
     SELECT VALUE {
         't': 
             CASE 
-                WHEN t IS STRUCT THEN
+                WHEN t IS STRUCT THEN (
                     PIVOT (
                         CASE 
                             WHEN LOWER(attr_1) = LOWER('a') THEN 
                                 CASE 
-                                    WHEN v_1 IS LIST THEN
+                                    WHEN v_1 IS LIST THEN (
                                         SELECT VALUE v_2
                                         FROM v_1 AS v_2 AT idx_2 
                                         WHERE idx_2 NOT IN [1] 
                                         ORDER BY idx_2
+                                    )
                                     ELSE v_1
                                 END
                             ELSE v_1
@@ -717,6 +734,7 @@ FROM (
                     )
                     AT attr_1 
                     FROM UNPIVOT t AS v_1 AT attr_1
+                )
                 ELSE t
             END
     }
@@ -779,7 +797,7 @@ FROM (
     SELECT VALUE {
         't': 
             CASE 
-                WHEN t IS STRUCT THEN
+                WHEN t IS STRUCT THEN (
                     PIVOT (
                         CASE 
                             WHEN LOWER(attr_1) = LOWER('a') THEN 
@@ -795,6 +813,7 @@ FROM (
                     )
                     AT attr_1 
                     FROM UNPIVOT t AS v_1 AT attr_1
+                )
                 ELSE t
             END
     }
@@ -846,28 +865,31 @@ Rewritten query:
 SELECT t.*
 FROM (
     SELECT VALUE {
-        't': CASE WHEN t IS TUPLE THEN
+        't': CASE WHEN t IS STRUCT THEN (
             PIVOT (
                 CASE WHEN LOWER(attr_1) = LOWER('a') THEN 
-                    CASE WHEN v_1 IS LIST THEN
+                    CASE WHEN v_1 IS LIST THEN (
                         SELECT VALUE
                             CASE WHEN idx_2 = 1 THEN
-                                CASE WHEN v_2 IS STRUCT THEN
+                                CASE WHEN v_2 IS STRUCT THEN (
                                     PIVOT v_3 AT attr_3
                                     FROM UNPIVOT v_2 AS v_3 AT attr_3
                                     WHERE LOWER(attr_3) NOT IN [LOWER('field_x')]
+                                )
                                 ELSE v_2
                                 END
                             ELSE v_2
                             END
                         FROM v_1 AS v_2 AT idx_2 
                         ORDER BY idx_2
+                    )
                     ELSE v_1
                     END
                 ELSE v_1
                 END
             ) AT attr_1 
             FROM UNPIVOT t AS v_1 AT attr_1
+        )
         ELSE t
         END
     }
@@ -931,33 +953,38 @@ Rewritten query:
 SELECT t.*
 FROM (
     SELECT VALUE {
-        't': CASE WHEN t IS STRUCT THEN
+        't': CASE WHEN t IS STRUCT THEN (
             PIVOT (
                 CASE WHEN LOWER(attr_1) = LOWER('a') THEN 
-                    CASE WHEN v_1 IS LIST THEN
+                    CASE WHEN v_1 IS LIST THEN (
                         SELECT VALUE 
-                            CASE WHEN v_2 IS STRUCT THEN
+                            CASE WHEN v_2 IS STRUCT THEN (
                                 PIVOT v_3 AT attr_3 
                                 FROM UNPIVOT v_2 AS v_3 AT attr_3
                                 WHERE LOWER(attr_3) NOT IN [LOWER('field_x')]
+                            )
                             ELSE v_2
                             END
                         FROM v_1 AS v_2 AT idx_2
                         ORDER BY idx_2
-                    WHEN v_1 IS BAG THEN
+                    )
+                    WHEN v_1 IS BAG THEN (
                         SELECT VALUE 
-                            CASE WHEN v_2 IS STRUCT THEN
+                            CASE WHEN v_2 IS STRUCT THEN (
                                 PIVOT v_3 AT attr_3 
                                 FROM UNPIVOT v_2 AS v_3 AT attr_3
                                 WHERE LOWER(attr_3) NOT IN [LOWER('field_x')]
+                            )
                             ELSE v_2
                             END
                         FROM v_1 AS v_2 -- no `AT` or `ORDER BY`
+                    )
                     ELSE v_1
                     END
                 ELSE v_1
                 END
             ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+        )
         ELSE t
         END
     }
@@ -1019,10 +1046,11 @@ FROM (
     SELECT VALUE {
         'foo': foo,
         'bar': 
-            CASE WHEN bar is STRUCT THEN
+            CASE WHEN bar is STRUCT THEN (
                 PIVOT v AT attr
                 FROM UNPIVOT bar AS v AT attr
                 WHERE LOWER(attr) NOT IN [LOWER('d')]
+            )
             ELSE bar
             END
     }
@@ -1085,10 +1113,11 @@ SELECT v, attr
 FROM (
     SELECT VALUE {
         'v': 
-            CASE WHEN v IS STRUCT THEN 
+            CASE WHEN v IS STRUCT THEN (
                 PIVOT v_v AT attr_v
                 FROM UNPIVOT v AS v_v AT attr_v
                 WHERE LOWER(attr_v) NOT IN [LOWER('foo')]
+            )
             ELSE v
             END,
         'attr': attr
@@ -1152,11 +1181,13 @@ SELECT t.*
 FROM (
     SELECT VALUE {
         't': 
-            CASE WHEN t IS STRUCT THEN
-                PIVOT v AT attr
-                FROM UNPIVOT t AS v AT attr
-                WHERE LOWER(attr) NOT IN [LOWER('a')]
-            ELSE v
+            CASE 
+                WHEN t IS STRUCT THEN (
+                    PIVOT v AT attr
+                    FROM UNPIVOT t AS v AT attr
+                    WHERE LOWER(attr) NOT IN [LOWER('a')]
+                )
+                ELSE v
             END
     }
     FROM <<
@@ -1211,12 +1242,13 @@ FROM (
     SELECT VALUE {
         't': 
             CASE
-                WHEN t IS STRUCT THEN
+                WHEN t IS STRUCT THEN (
                     PIVOT v_1 AT attr_1
                     FROM UNPIVOT t AS v_1 AT attr_1
                     WHERE
                         attr_1 NOT IN ['a', 'b'] AND
                         LOWER(attr_1) NOT IN [LOWER('d'), LOWER('e')]
+                )
                 ELSE t
             END
     }
@@ -1268,15 +1300,16 @@ FROM (
     SELECT VALUE {
         't': 
             CASE 
-                WHEN t IS STRUCT THEN
+                WHEN t IS STRUCT THEN (
                     PIVOT (
                         CASE 
                             WHEN LOWER(attr_1) = LOWER('a') THEN
                                 CASE 
-                                    WHEN v_1 IS STRUCT THEN
+                                    WHEN v_1 IS STRUCT THEN (
                                         PIVOT v_2 AT attr_2 
                                         FROM UNPIVOT v_1 AS v_2 AT attr_2
                                         WHERE LOWER(attr_2) NOT IN [LOWER('a1')]
+                                    )
                                     ELSE v_1
                                 END
                             ELSE v_1
@@ -1284,6 +1317,7 @@ FROM (
                     ) AT attr_1 
                     FROM UNPIVOT t AS v_1 AT attr_1 
                     WHERE LOWER(attr_1) NOT IN [LOWER('b')]
+                )
                 ELSE t
             END
     }
@@ -1337,30 +1371,34 @@ SELECT t.*
 FROM (
     SELECT VALUE {
         't': 
-            CASE WHEN t IS STRUCT THEN
+            CASE WHEN t IS STRUCT THEN (
                 PIVOT (
                     CASE WHEN LOWER(attr_1) = LOWER('a') THEN
-                        CASE WHEN v_1 IS STRUCT THEN
+                        CASE WHEN v_1 IS STRUCT THEN (
                             PIVOT (
-                                CASE WHEN v_2 IS STRUCT THEN
+                                CASE WHEN v_2 IS STRUCT THEN (
                                     PIVOT v_3 AT attr_3
                                     FROM UNPIVOT v_2 AS v_3 AT attr_3
                                     WHERE LOWER(attr_3) NOT IN [LOWER('bar')]
+                                )
                                 ELSE v_2
                                 END
                             ) AT attr_2
                             FROM UNPIVOT v_1 AS v_2 AT attr_2
                             WHERE LOWER(attr_2) NOT IN [LOWER('bar')]
-                        WHEN v_1 IS LIST THEN
+                        )
+                        WHEN v_1 IS LIST THEN (
                             SELECT VALUE 
-                                CASE WHEN v_2 IS STRUCT THEN
+                                CASE WHEN v_2 IS STRUCT THEN (
                                     PIVOT v_3 AT attr_3
                                     FROM UNPIVOT v_2 AS v_3 AT attr_3
                                     WHERE LOWER(attr_3) NOT IN [LOWER('bar')]
+                                )
                                 ELSE v_2
                                 END
                             FROM v_1 AS v_2 AT idx_2
                             ORDER BY idx_2
+                        )
                         -- WHEN v_1 IS BAG THEN ... 
                         -- same as for LIST but remove `AT` and `ORDER BY`
                         ELSE v_1
@@ -1368,6 +1406,7 @@ FROM (
                     ELSE v_1
                     END
                 ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+            )
             ELSE t
             END
     }
