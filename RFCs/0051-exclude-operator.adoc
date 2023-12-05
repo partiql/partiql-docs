@@ -88,12 +88,12 @@ e.g. tableFoo.a[1].*[*].b['c']
 * We restrict tuple attribute exclude steps to use string literals and collection index exclude steps to use int literals. Thus `<exclude paths>` are statically known. We can decide whether to add other exclude paths (e.g. expressions) if a use case arises.
 * If sufficient schema is present and the path can be resolved, we assume the root of an `EXCLUDE` path can be omitted. The variable resolution rules follow what is already included in the PartiQL specification.
 * We require that every fully-qualified `<exclude path>` contain a root and at least one step. If a use case arises to exclude a binding tuple variable, then this functionality can be added.
-* S-expressions are part of the Ion type system. footnote:[https://amazon-ion.github.io/ion-docs/docs/spec.html#sexp].
+* S-expressions are part of the Ion type system.footnote:[https://amazon-ion.github.io/ion-docs/docs/spec.html#sexp]
 PartiQL should support s-expression types and values since PartiQL's type system is a superset over the Ion types. Because the current PartiQL specification does not formally define s-expressions operations, we consider the definition of collection index and wildcard steps on s-expressions as out-of-scope for this RFC.
 
 === Rewrite Procedure
 ==== Step 1: subsumption of `EXCLUDE` paths
-We perform the following step to ensure that there are no redundant `EXCLUDE` paths. That is, there is no path such that all of its excluded binding tuple values are excluded by another exclude path. footnote:[This subsumption step is included to make the subsequent rewrite steps easier to reason about. In a query without redundant exclude paths, this step is not necessary.]
+We perform the following step to ensure that there are no redundant `EXCLUDE` paths. That is, there is no path such that all of its excluded binding tuple values are excluded by another exclude path.footnote:[This subsumption step is included to make the subsequent rewrite steps easier to reason about. In a query without redundant exclude paths, this step is not necessary.]
 
 For each `<exclude path>` `p=root~p~s~1~...s~x~`, we compare it with all other ``<exclude path>``s. `<exclude path>` `p` is said to be subsumed by another path `q=root~q~t~1~...t~y~` and not included in the rewritten `EXCLUDE` clause if any of the following rules apply:
 
@@ -103,7 +103,7 @@ NOTE: The following rules assume `root~p~=root~q~`.
 [[anchor-1a]] Rule 1.a::
     If `y = 0` (i.e. `q` has no steps), `q` subsumes `p`.
 [[anchor-1b]] Rule 1.b::
-    If `y ≥ x` and `s~1~...s~x~=t~1~...t~x~`, `q` subsumes `p`. Put another way if `p` has at least as many steps as `q` and the steps up to ``q``'s length are equivalent, `q` subsumes `p`.
+    If `x ≥ y` and `s~1~...s~x~=t~1~...t~x~`, `q` subsumes `p`. Put another way if `p` has at least as many steps as `q` and the steps up to ``q``'s length are equivalent, `q` subsumes `p`.
 
 Otherwise, there must be some step at which `p` and `q` diverge. Let's call this step's index `i`.
 
@@ -180,7 +180,7 @@ SELECT VALUE {
     'r':
         CASE
             WHEN ... --  branch(es) dependent on ``s~1~``'s rewrite rule
-                    ... -- nested `CASE` expressions for `s~2~...s~n~`
+                    ... -- nested `CASE` expressions for `s~2~...s~n-1~`
                         CASE
                             WHEN ... -- branch(es) dependent on ``s~n~``'s rewrite rule
                         ELSE <v~n-1~>
@@ -340,6 +340,7 @@ For multiple `EXCLUDE` paths, we employ a similar idea as the rewrite for a sing
 [source,partiql,subs="+{markup-in-source}"]
 ----
 -- Let `M` represent the number of `EXCLUDE` paths
+-- Let `R` represent the number of unique `EXCLUDE` path roots
 
 -- Original query:
 <select clause>
@@ -347,7 +348,6 @@ EXCLUDE p~1~,...,p~M~
 <from clause>
 <other clauses>
 
--- Let `R` represent the number of unique `EXCLUDE` path roots
 -- Rewritten to:
 <select clause>
 FROM (
