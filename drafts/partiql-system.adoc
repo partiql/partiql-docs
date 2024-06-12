@@ -1,0 +1,105 @@
+= PartiQL-System
+
+// MOTIVATION
+// ----------
+// The PartiQL Specification briefly mentions a _database environment_ which is akin to a single catalog and schema, but we have yet-to-define fundamental system concepts such as catalogs, schemas, information_schema, and the SQL PATH. These concepts govern all current PartiQL functionality (table and function resolution), developing functionality such as DDL/DML, as well as future functionality such as views.
+//
+
+== Scope
+
+This document defines the _PartiQL-System_ and _PartiQL-Session_ which together form the foundation for defining statement semantics.
+
+== Definitions
+
+[loweralpha,title="PartiQL-System",start=1]
+. **PartiQL-System**: One or more _catalogs_ and a _PartiQL-implementation_.
+. **PartiQL-Implementation**: A processor that executes _statements_ given a _session_.
+. **PartiQL-Client**: Any entity which executes statements against a _PartiQL-system_.
+. **Statement**: A string of characters conforming to the PartiQL syntax and semantics.
+.. **DQL**: Query statements such as SELECT.
+.. **DDL**: Definition statements such as CREATE TABLE.
+.. **DML**: Manipulation statements such as INSERT, UPDATE and DELETE.
+.. **Query**: A _DQL_ statement is typically called a _query_.
+. **CRUD**: The fundamental data operations e.g. INSERT / SELECT / UPDATE / DELETE 
+
+[loweralpha,title="Objects",start=7]
+. **Catalog**: A named collection of _objects_ at the root (top-level) of a _PartiQL-system_.
+. **Object**: A named item of a catalog; e.g. namespace, table, view, or routine.
+. **Namespace**: A named collection of _objects_; namespaces can contain other namespaces.
+. **Table**: A named value which is typically (but not necessarily) a collection of structs.
+. **View**: A named query statement.
+. **Routine**: A named function or procedure which is usable in a _statement_.
+.. **Function**: A routine invoked in the context of a value expression.
+.. **Procedure**: A routine invoked as a CALL statement.
+. **Name**: An identifier associated with a _catalog_ or _object_.
+
+[loweralpha,title="PartiQL-Session",start=14]
+. **PartiQL-session**: A session is state for a _PartiQL-client_ that is used during statement processing.
+. **Session namespace**: A reference to a _namespace_ used for name resolution.
+. **Session PATH**: A sequence of _namespace_ names which determine the search order for _object_ resolution.
+
+NOTE: A _catalog_ is just a _namespace_ at the root level.
+
+== Concepts
+
+=== PartiQL-System
+
+A PartiQL-System is a link:https://en.wikipedia.org/wiki/Database#Database_management_system[Database Management System] composed of one or more catalogs and a PartiQL-Implementation. Each catalog is a named collection of object descriptors such as namespaces, tables, and routines which form a hierarchical structure much like a file system. This abstraction enables PartiQL's statement semantics to be ammenable to various database models such as relational, document, and graph.
+
+NOTE: A namespace is just like a schema in traditional SQL-systems i.e. a named collection of object descriptors — however, a namespace may contain additional namespaces.
+
+This example contains two catalogs (1) _benchmarks_ and (2) _samples_. The _benchmarks_ catalog has two namespaces for the TPC tables at different scales, and the _samples_ catalog has two table descriptors.
+
+.Example
+[source]
+----
+.
+├── benchmarks              -- catalog
+│   ├── tpc_10              -- namespace
+│   │   ├── customer        -- table descriptor
+│   │   ├── ...             
+│   │   └── item            -- table descriptor
+│   └─── tpc_100
+│       ├── customer        -- table descriptor
+│       ├── ...             
+│       └── item            -- table descriptor
+└── samples
+    ├── sample_0            -- table descriptor
+    └── sample_1            -- table descriptor
+----
+
+=== PartiQL-Implementation
+
+A _PartiQL-Implemention_ is responsible for executing statements against the PartiQL-System given a PartiQL-Session.
+
+=== PartiQL-Client
+
+A _PartiQL-Client_ holds a PartiQL-Session and executes statments against a PartiQL-Implemention.
+
+=== PartiQL-Session
+
+A _PartiQL-Session_ holds information about the client's state such as the user, namespace, and PATH. The namespace and PATH determine how a PartiQL-Implementation resolves names when executing a statement. Please see xref:name-resolution.adoc[Name Resolution] for these rules.
+
+The current namespace is accessible in statements by using the _NAMESPACE_ variable. A client may update the current namespace with the `SET NAMESPACE TO <name>` statement. For SQL compatibility, a _PartiQL-system_ must support `USE CATALOG <name>` and `USE SCHEMA <name>`.
+
+A session's PATH is accessible in statements by using the _PATH_ variable. A client may update the PATH with the `SET PATH TO <PATH>` statement. The PATH is an array of names. The PATH is never empty and always contains the current namespace. 
+
+.Session Statements
+[source]
+----
+USE NAMESPACE <name>;
+USE CATALOG <name>;
+USE SCHEMA <name>;
+
+SET NAMESPACE TO <name>;
+SET PATH TO <PATH>;
+----
+
+[IMPORTANT]
+====
+The session statements have two distinct behaviors.
+
+. The `USE` statement comes from SQL systems and **will modify both the namespace and PATH**.
+. The `SET` statement **will only modify the specified session attribute**.
+====
+
