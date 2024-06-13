@@ -1,46 +1,26 @@
 = Name Resolution
 
-> THIS DOCUMENT IS A DRAFT AND IS NOT READY FOR REVIEW
-
 == Scope
 
-This document follows along with the _PartiQL-system_ implementation; it will be upstreamed to the specification once the PR is completed.
+This document defines the name resolution rules for tables, views, routines, and variables in the context of a xref:partiql-system.adoc[_PartiQL-System_] and a xref:partiql-system.adoc[_PartiQL-Session_].
 
 == Definitions
 
+[loweralpha,title="Names",start=1]
+. **Name**: A relative or absolute name is composed of one or more identifiers.
+. **Identifier**: A quoted or unquoted symbol.
+. **Lookup Strategy**: Local-first or global-first lookup.
+
+[loweralpha,title="From PartiQL-System",start=4]
 . **Catalog**: A named collection of _objects_ at the root (top-level) of a _PartiQL-system_.
-. **Object**: A named item of a catalog; e.g. namespace, table, view, or routine.
 . **Namespace**: A named collection of _objects_; namespaces can contain other namespaces.
-. **Table**: A named value which is typically (but not necessarily) a collection of structs.
-. **View**: A named query statement.
-. **Routine**: A named function or procedure which is usable in a _statement_.
-.. **Function**: A routine invoked in the context of a value expression.
-.. **Procedure**: A routine invoked as a CALL statement.
-. **Name**: An identifier associated with a _catalog_ or _object_.
+. **Object**: A named item of a catalog; e.g. namespace, table, view, or routine.
 
 == Concepts
 
 === Names
 
-The following section gives a high-level description of the name resolution rules for tables and routines. Names are resolved using the current namespace _S_ and the session path _PATH_.
-
-Names are either absolute or relative. An absolute name is always resolved from the root, and a relative name is resolved by prepending the current namespace to the relative name to form an absolute name.
-
-.Name Syntax
-[source]
-----
-name
- :     id ('.' id)*  # relative name
- | '.' id ('.' id)*  # absolute name
- ;
-
-id
- : '"' symbol '"' # quoted identifier
- |     symbol     # symbol identifier
- ;
-
-symbol: ...;
-----
+Names composed of one or more identifiers which reference either a database object or a local variable. Identifiers are joined by a _<period>_ and a leading _<period>_ denotes an absolute name.
 
 [cols="1e,1,2"]
 |===
@@ -51,7 +31,45 @@ symbol: ...;
 
 |===
 
-== Name Resolution
+.Name Syntax
+[source,ebnf]
+----
+<name> ::= <relative name> | <absolute name>
+
+<relative name> ::= <identifier> [ <period> <identifier> ]... 
+
+<absolute name> ::= <period> <identifier> [ <period> <identifier> ]... 
+
+<identifier>
+    ::= <double quote> <symbol> <double quote>
+      | <symbol>
+----
+// <period> ::= '.'
+// <at> ::= '@'
+// <symbol> ::= # [A-Za-z_][A-Za-z_0-9]*
+
+// <value expression>
+//     ::= <variable expression>
+//       | <table expression>
+//       | ....
+
+// <variable expression>
+//     ::= [ <at> ] <relative name>
+//       | <absolute name>
+
+// <table expression>
+//     ::= <table reference>
+//       | <value expression>
+
+// <table reference> ::= <name>
+
+=== Lookup Strategies
+
+> INCOMPLETE
+
+== Rules
+
+Generally and absolute name is always resolved from the root, and a relative name is resolved by prepending the current namespace to the relative name to form an absolute name.
 
 === Table Resolution
 
@@ -75,3 +93,7 @@ Let _N_ be a routine name with symbols _n~1~ , ... , n~i~_ and _S_ be the sessio
 .. If _N_ is relative, then _R = S + N = . s~1~ . s~2~ ... s~j~ . n~1~ . n~2~. ... n~i~_ .
 .. If _N_ is absolute, then _R = N = . n~1~ . n~2~ ... n~i~_
 . Return all routines matching absolute name _R_.
+
+== Guide
+
+> PLACEHOLDER
