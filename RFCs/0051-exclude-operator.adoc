@@ -1,0 +1,1703 @@
+= Exclude Clause
+
+:markup-in-source: verbatim,quotes
+
+
+* Start Date: 2023-11-07
+* PartiQL Issue: https://github.com/partiql/partiql-lang/issues/27
+* RFC PR: https://github.com/partiql/partiql-docs/pull/51
+
+== Summary
+
+This doc defines the `EXCLUDE` binding tuple operator used to omit nested values before projection and defines the semantics in terms of syntactic rewrites with existing operators.
+
+== Motivation
+
+SQL users often use `SELECT *` to project all of the columns of a table. There is frequently a use case in which a user would like to project all the columns from a table other than a subset of the columns (see https://stackoverflow.com/q/729197[Stack Overflow question]). There are workarounds in some database systems that are somewhat inefficient (e.g. creating a new table and dropping a specific column), but it can be helpful to have a dedicated syntax to filter out certain columns. <<Prior art>> lists out a few databases that provide some version of this column filtering.
+
+There is a similar need among PartiQL users to exclude certain nested fields from semi-structured data. PartiQL supports `SELECT *` to project all of the fields of a binding tuple. If a user wanted to omit one field from this projection, they would need to list out all of the projection fields or perform some intricate combination of `PIVOT` and ``UNPIVOT``s.
+
+[source,partiql,subs="+{markup-in-source}"]
+----
+-- Suppose `tbl` is a collection of tuples that have `n` fields, `field~1~,...,field~n~`.
+-- To filter out `field~i~`, we would have to list out all fields other than `field~i~`.
+SELECT
+    field~1~, ..., field~i-1~, field~i+1~, ..., field~n~ -- omit `field~i~` from tbl
+FROM
+    tbl
+----
+
+== Guide-level explanation
+
+=== BNF Grammar
+
+[source,ebnf]
+----
+<sfw query> ::=
+    <select clause>
+    <exclude clause>?  (* NEW *)
+    <from clause>
+    (* other clauses from <sfw query> in PartiQL spec figure 3 *)
+
+<fws query> ::=
+    <from clause>
+    (* other clauses same as fws query *)
+    <exclude clause>?  (* NEW *)
+    <select clause>
+    
+<exclude clause> ::=
+    EXCLUDE <exclude path> [, <exclude path>]...
+
+<exclude path> ::=
+    <identifier>
+  | <exclude path> <dot> <identifier>
+  | <exclude path> <left bracket> <int literal> <right bracket>
+  | <exclude path> <left bracket> <string literal> <right bracket>
+  | <exclude path> <dot> <asterisk>
+  | <exclude path> <left bracket> <asterisk> <right bracket>
+
+<identifier> ::= (* See identifier in PartiQL spec figure 4 *)
+
+<asterisk> ::= "*"
+<dot> :: = "."
+<left bracket> ::= "["
+<right bracket> ::= "]"
+----
+
+NOTE: Despite their similar syntax and naming, ``<exclude path>``s are different than PartiQL path expressions.
+
+=== Terminology
+* For an `<exclude path>`, we refer to the leftmost identifier as the 'root' and the other exclude path components as 'steps'.
++
+[source]
+----
+e.g. tableFoo.a[1].*[*].b['c']
+    |  root  |     steps     |
+----
++
+* We refer to the exclude steps as follows
+** `.<identifier>` - tuple attribute exclude step
+*** `.<quoted identifier>`/`[<string literal>]` - case-_sensitive_ tuple attribute
+*** `.<unquoted identifier>` - case-_insensitive_ tuple attribute
+** `[<int literal>]` - collection index exclude step
+** `.*` - tuple wildcard exclude step
+** `[*]` - collection wildcard exclude step
+
+=== Out of scope / assumptions
+
+* We restrict tuple attribute exclude steps to use string literals and collection index exclude steps to use int literals. Thus `<exclude paths>` are statically known. We can decide whether to add other exclude paths (e.g. expressions) if a use case arises.
+* If sufficient schema is present and the path can be resolved, we assume the root of an `EXCLUDE` path can be omitted. The variable resolution rules follow what is already included in the PartiQL specification.
+* We require that every fully-qualified `<exclude path>` contain a root and at least one step. If a use case arises to exclude a binding tuple variable, then this functionality can be added.
+* S-expressions are part of the Ion type system.footnote:[https://amazon-ion.github.io/ion-docs/docs/spec.html#sexp]
+PartiQL should support s-expression types and values since PartiQL's type system is a superset over the Ion types. Because the current PartiQL specification does not formally define s-expressions operations, we consider the definition of collection index and wildcard steps on s-expressions as out-of-scope for this RFC.
+
+=== Rewrite Procedure
+==== Step 1: subsumption of `EXCLUDE` paths
+We perform the following step to ensure that there are no redundant `EXCLUDE` paths. That is, there is no path such that all of its excluded binding tuple values are excluded by another exclude path.footnote:[This subsumption step is included to make the subsequent rewrite steps easier to reason about. In a query without redundant exclude paths, this step is not necessary.]
+
+For each `<exclude path>` `p=root~p~s~1~...s~x~`, we compare it with all other ``<exclude path>``s. `<exclude path>` `p` is said to be subsumed by another path `q=root~q~t~1~...t~y~` and not included in the rewritten `EXCLUDE` clause if any of the following rules apply:
+
+NOTE: The following rules assume `root~p~=root~q~`.
+
+.Subsumption rules
+[[anchor-1a]] Rule 1.a::
+    If `y = 0` (i.e. `q` has no steps), `q` subsumes `p`.
+[[anchor-1b]] Rule 1.b::
+    If `x ≥ y` and `s~1~...s~x~=t~1~...t~x~`, `q` subsumes `p`. Put another way if `p` has at least as many steps as `q` and the steps up to ``q``'s length are equivalent, `q` subsumes `p`.
+
+Otherwise, there must be some step at which `p` and `q` diverge. Let's call this step's index `i`.
+
+[[anchor-1c]] Rule 1.c::
+    If `s~i~` is a tuple attribute and `t~i~` is a tuple wildcard and `t~i+1~...t~y~` subsumes `s~i+1~...s~x~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
+[[anchor-1d]] Rule 1.d::
+    If `s~i~` is a collection index and `t~i~` is a collection wildcard and `t~i+1~...t~y~` subsumes `s~i+1~...s~x~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
+[[anchor-1e]] Rule 1.e::
+    If `s~i~` is a case-sensitive tuple attribute and `t~i~` is a case-insensitive tuple attribute and `t~i+1~...t~y~` subsumes `s~i+1~...s~x~` (i.e. the steps following `t~i~` subsumes the steps following `s~i~`), then `q` subsumes `p`.
+
+.Subsumption Examples
+[options="header,footer"]
+|=======================
+|Exclude Path `p`|Exclude Path `q`|Notes
+|`s.a`        |`t.a`       |No subsumption rules apply (roots differ)
+|`t.a`        |`t.b`       |No subsumption rules apply
+|`t.a.b.c`    |`t.a.*.d`   |No subsumption rules apply
+|`t.a`        |`t`         |`q` subsumes `p` (by <<anchor-1a, 1.a>>)
+|`t.a.b.c`    |`t.a.b.c`   |`q` subsumes `p` (by <<anchor-1b, 1.b>>)
+|`t.a.b.c`    |`t.a.b`     |`q` subsumes `p` (by <<anchor-1b, 1.b>>)
+|`t.a.b.c`    |`t.a.b.*`   |`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1a, 1.a>>)
+|`t.a.b.c`    |`t.a.*.c`   |`q` subsumes `p` (by <<anchor-1c, 1.c>> then <<anchor-1b, 1.b>>)
+|`t.a.b[1]`   |`t.a.b`     |`q` subsumes `p` (by <<anchor-1b, 1.b>>)
+|`t.a.b[1]`   |`t.a.b[*]`  |`q` subsumes `p` (by <<anchor-1d, 1.d>> then <<anchor-1a, 1.a>>)
+|`t.a.b[1].c` |`t.a.b[1]`  |`q` subsumes `p` (by <<anchor-1b, 1.b>>)
+|`t.a.b[1].c` |`t.a.b[*]`  |`q` subsumes `p` (by <<anchor-1d, 1.d>> then <<anchor-1a, 1.a>>)
+|`t.a.b[1].c` |`t.a.b[*].c`|`q` subsumes `p` (by <<anchor-1d, 1.d>> then <<anchor-1b, 1.b>>)
+|`t.a."b"`    |`t.a.b`     |`q` subsumes `p` (by <<anchor-1e, 1.e>> then <<anchor-1a, 1.a>>)
+|`t.a."b".c`  |`t.a.b.c`   |`q` subsumes `p` (by <<anchor-1e, 1.e>> then <<anchor-1b, 1.b>>)
+|=======================
+
+---
+We first illustrate the rewrite rule for a single `EXCLUDE` path and then explain the syntax rewrite for multiple exclude paths.
+
+==== Step 2 (single): rewrite a single `EXCLUDE` path
+
+To rewrite a single `EXCLUDE` path with `n` steps, `p=r.s~1~...s~n~`, we move the clauses other than the `SELECT`/`PIVOT` into a subquery, which will `EXCLUDE` the binding tuple values at the path `p`. This subquery essentially reconstructs the binding tuple of the other clauses using a `SELECT VALUE` tuple to project back the binding tuple variables. All of the variables created from the other clauses not matching the `EXCLUDE` root `r` will use the identity function (e.g. binding tuple variable `foo` will have attribute `'foo'` and value `foo` in the `SELECT VALUE` tuple). For the variable matching the `EXCLUDE` path root `r`, we apply the following rewrite rules to define ``r``'s value within the `SELECT VALUE` tuple. If there is no such variable matching `EXCLUDE` path root `r`, the `EXCLUDE` path will not alter any of the binding tuple values. Hence, no rewrite rule is applied.
+
+If the other clauses include an `ORDER BY`, we convert the top-level query back into an array by adding a position variable (i.e. `AT` clause) along with an `ORDER BY` over the position variable.
+
+[source,partiql,subs="+{markup-in-source}"]
+----
+-- Original query:
+<select clause>
+EXCLUDE r.s~1~...s~n~
+<from clause>
+<other clauses>
+
+-- Rewritten to:
+<select clause>
+FROM (
+    SELECT VALUE {
+        'r': -- Apply below rewrite rules for steps `s~1~...s~n~`
+        ...  -- Other vars created from the other clauses
+    }
+    <from clause>
+    <other clauses>
+)
+[   -- Include conversion back to array if `ORDER BY` present in `<other clauses>`
+    -- Assume `<topLevelTbl>` and `<idx>` are fresh variables
+    AS <topLevelTbl> AT <idx>
+    ORDER BY <idx>
+]
+----
+
+
+The main idea for rewriting the `EXCLUDE` steps `s~1~,...,s~n~` is to create a nested `CASE` expression for each step, whereby the nested `CASE` expressions for `s~1~,...,s~n-1~` unnest the input binding tuple and the final `CASE` expression for `s~n~` (i.e. the final step) filters out the desired tuple field(s) or collection index(es). Every exclude step has an expected type to process during evaluation. Tuple attribute and wildcard exclude steps expect a tuple. Whereas a collection index expects an array and a collection wildcard expects an array or bag. The `CASE` expression at each level `i` recreates this expected type by including a `WHEN` branch based on the expected type. Each `CASE` expression will include an `ELSE` branch which outputs the previous level's identifier. This set of branches ensures that at evaluation time, if there is a type mismatch (e.g. evaluation value is an array while the exclude step is a tuple attribute), there is no evaluation error and the previous level's value is returned through the `ELSE` branch. This behavior applies to both the permissive and strict typing modes.
+
+[source,partiql,subs="+{markup-in-source}"]
+----
+-- For the value `r` in our `SELECT VALUE` tuple:
+-- Assuming `<v~n-1~>` is the identifier created from the previous exclude step, `s~n-1~`
+SELECT VALUE {
+    'r':
+        CASE
+            WHEN ... --  branch(es) dependent on ``s~1~``'s rewrite rule
+                    ... -- nested `CASE` expressions for `s~2~...s~n-1~`
+                        CASE
+                            WHEN ... -- branch(es) dependent on ``s~n~``'s rewrite rule
+                        ELSE <v~n-1~>
+                        END
+            ELSE r
+        END
+}
+----
+
+[[anchor-2]]
+.Rewrite rule 2: `EXCLUDE` steps `s~1~,...,s~n-1~`
+For this rewrite rule definition, let `<v~i-1~>` be the identifier created from the previous exclude step (or `r` if this is the first step). For some exclude step `s~i~` that is not the last step, we case on the type of exclude step.
+
+[[anchor-2ai]] Rule 2.a.i::
+    If `s~i~` is a case-sensitive tuple attribute exclude step (e.g. `."foo"` or `['foo']`), where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~i-1~> IS TUPLE THEN (
+    PIVOT (
+        CASE 
+            WHEN <attr~i~> = <s~i~> THEN
+                -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
+            ELSE <v~i~>
+        END
+    )
+    AT <attr~i~>
+    FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
+)
+----
+[[anchor-2aii]] Rule 2.a.ii::
+    If `s~i~` is a case-insensitive tuple attribute exclude step (e.g. `.foo`), where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the the `i`^th^ nested `CASE`.
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~i-1~> IS TUPLE THEN (
+    PIVOT (
+        CASE 
+            WHEN LOWER(<attr~i~>) = LOWER(<s~i~>) THEN
+                -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
+            ELSE <v~i~>
+        END
+    )
+    AT <attr~i~>
+    FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
+)
+----
+NOTE: This is essentially the same as <<anchor-2ai>> but wraps the inner `CASE WHEN` comparison between `<attr~i~>` and `<s~i~>` with calls to `LOWER`.
+
+[[anchor-2b]] Rule 2.b::
+    If `s~i~` is a tuple wildcard exclude step, where `<v~i~>` and `<attr~i~>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~i-1~> IS TUPLE THEN (
+    PIVOT 
+        -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
+    AT <attr~i~>
+    FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
+)
+----
+[[anchor-2c]] Rule 2.c::
+    If `s~i~` is a collection index exclude step, where `<v~i~>` and `<idx~i~>` are fresh variables, add the following `WHEN` branch to the `i`^th^ nested `CASE`.
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~i-1~> IS ARRAY THEN (
+    SELECT VALUE
+        CASE 
+            WHEN <idx~i~> = <s~i~> THEN
+                -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
+            ELSE <v~i~>
+        END
+    FROM <v~i-1~> AS <v~i~> AT <idx~i~>
+    ORDER BY <idx~i~>
+)
+----
+[[anchor-2d]] Rule 2.d::
+    If `s~i~` is a collection wildcard exclude step, where `<v~i~>` and `<idx~i~>` are fresh variables, add the following `WHEN` branches to the `i`^th^ nested `CASE`.
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~i-1~> IS ARRAY THEN (
+    SELECT VALUE
+        -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
+    FROM <v~i-1~> AS <v~i~> AT <idx~i~>
+    ORDER BY <idx~i~>
+)
+WHEN <v~i-1~> IS BAG THEN (
+    SELECT VALUE
+        -- Apply rewrite rules on remaining exclude steps `s~i+1~,...,s~n~`
+    FROM <v~i-1~> AS <v~i~>
+)
+----
+
+.Rewrite rule 3: `EXCLUDE` step `s~n~`
+The last step of a single `EXCLUDE` path rewrite follows a similar structure as rewrite rules for steps `s~1~...s~n-1~` by adding a `CASE ... ELSE ... END`. Let `<v~n-1~>` be the identifier created from the previous exclude step (or `r` if `n=1`).
+
+[source,partiql,subs="+{markup-in-source}"]
+----
+CASE
+    ... -- WHEN branch(es) depending on the last exclude step `s~n~`
+    ELSE <v~n-1~>
+END
+----
+
+Similar to <<anchor-2>>, we case on the type of exclude step to determine which `WHEN` branch(es) to add to the `n`^th^ nested `CASE` expression.
+
+[[anchor-3ai]] Rule 3.a.i::
+    If the last step, `s~n~`, is a case-sensitive tuple attribute exclude step, where `<v~n~>` and `<attr~n~>` are fresh variables, we add the following `WHEN` branch:
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~n-1~> IS TUPLE THEN (
+    PIVOT <v~n~> AT <attr~n~>
+    FROM UNPIVOT <v~n-1~> AS <v~n~> AT <attr~n~>
+    WHERE <attr~n~> NOT IN [ <s~n~> ]
+)
+----
+[[anchor-3aii]] Rule 3.a.ii::
+    If the last step, `s~n~`, is a case-insensitive tuple attribute exclude step, where `<v~n~>` and `<attr~n~>` are fresh variables, we add the following `WHEN` branch:
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~n-1~> IS TUPLE THEN (
+    PIVOT <v~n~> AT <attr~n~>
+    FROM UNPIVOT <v~n-1~> AS <v~n~> AT <attr~n~>
+    WHERE LOWER( <attr~n~> ) NOT IN [ LOWER(<s~n~>) ] -- difference w/ 3.a.i is `LOWER` call on `<attr~n~>` and `<s~n~>`
+)
+----
+[[anchor-3b]] Rule 3.b::
+    If the last step, `s~n~`, is a tuple wildcard exclude step, we add the following `WHEN` branch:
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~n-1~> IS TUPLE THEN
+    { }     -- empty tuple
+----
+[[anchor-3c]] Rule 3.c::
+    If the last step is a collection index exclude step, where `<v~n~>` and `<idx~i~>` are fresh variables, we add the following `WHEN` branch:
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~n-1~> IS ARRAY THEN
+    SELECT VALUE <v~n~>
+    FROM <v~n-1~> AS <v~n~> AT <idx~i~>
+    WHERE <idx~i~> NOT IN [<s~n~>]
+    ORDER BY <idx~i~>
+----
+[[anchor-3d]] Rule 3.d::
+    If the last step, `s~n~`, is a collection wildcard exclude step, we add the following two `WHEN` branches:
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~n-1~> IS ARRAY THEN
+    []      -- empty array
+WHEN <v~n-1~> IS BAG THEN
+    <<>>    -- empty bag
+----
+
+Based on the defined rules for single `EXCLUDE` path rewrites, we will now cover how multiple paths are to be rewritten.
+
+==== Step 2 (multiple): rewriting multiple `EXCLUDE` paths
+
+For multiple `EXCLUDE` paths, we employ a similar idea as the rewrite for a single path. The clauses other than the `SELECT`/`PIVOT` are moved to a subquery that will be ranged over. This subquery contains a `SELECT VALUE` tuple which will reconstruct the binding tuple of the other clauses with the exclude paths' rewrite. Variables created from the other clauses without a matching exclude path root will be included in the tuple with the identity function. Every binding tuple variable matching one or more exclude path roots will have a tuple value defined using the below rewrites.
+
+[source,partiql,subs="+{markup-in-source}"]
+----
+-- Let `M` represent the number of `EXCLUDE` paths
+-- Let `R` represent the number of unique `EXCLUDE` path roots
+
+-- Original query:
+<select clause>
+EXCLUDE p~1~,...,p~M~
+<from clause>
+<other clauses>
+
+-- Rewritten to:
+<select clause>
+FROM (
+    SELECT VALUE {
+        'r~1~': -- apply rewrite rules on exclude paths that have root `r~1~`
+          ⋮
+        'r~R~': -- apply rewrite rules on exclude paths that have root `r~R~`
+        ...   -- other variables created from the other clauses
+    }
+    <from clause>
+    <other clauses>
+)
+[   -- Include conversion back to array if `ORDER BY` present in `<other clauses>`
+    -- Assume `<topLevelTbl>` and `<idx>` are fresh variables
+    AS <topLevelTbl> AT <idx>
+    ORDER BY <idx>
+]
+----
+Like single path rewriting, we create a nested `CASE` expression for each step. However, for multiple paths, we look at all the applicable paths in parallel and process the steps at the same level. Applicable paths refers to the subset of paths that have the same root and same tuple attributes/collection indexes at previous levels. For the following, let `z` be the length of the longest exclude path. The nested `CASE` expressions for all level `i=1,...,z` are created as before. For the following, let `<v~i-1~>` be the identifier from the previous level (or the root identifier if `i = 1`).
+
+[source,partiql,subs="+{markup-in-source}"]
+----
+CASE
+    WHEN <v~i-1~> IS TUPLE THEN
+        ... -- apply tuple attr and wildcard path rewrite (rule 4.a)
+    WHEN <v~i-1~> IS ARRAY THEN
+        ... -- apply collection index and wildcard path rewrite (rule 4.b)
+    WHEN <v~i-1~> IS BAG THEN
+        ... -- apply collection wildcard path rewrite (rule 4.b)
+    ELSE <v~i-1~>
+END
+----
+
+If any of the applicable `EXCLUDE` paths at level `i` have a tuple attribute or wildcard exclude step, then we add the following `WHEN` branch to the `i`^th^ nested `CASE` expression. Alike the tuple exclude rules defined for single `EXCLUDE` paths, we add a `PIVOT ... UNPIVOT` over the previous level's value `<v~i-1~>`.
+
+Rule 4.a::
+We divide the set of applicable `EXCLUDE` tuple attribute and wildcard paths into two subsets:
+
+1. paths of length `i` (i.e. final step is `i`)
+2. paths of length greater than `i` (i.e. have additional steps)
+
+If there are any `EXCLUDE` paths of length `i`, then similar to <<anchor-3ai, Rule 3.a.i>> and <<anchor-3aii, Rule 3.a.ii>>, we add a `WHERE` clause to filter out those fields. The fields to exclude will be grouped together based on if the tuple attribute exclude step was case sensitive or case-insensitive.
+
+If there are any `EXCLUDE` paths of length greater than `i`, then similar to <<anchor-2ai, Rule 2.a.i>> and <<anchor-2aii, Rule 2.a.ii>>, we add a `CASE` expression within the `PIVOT`. This `CASE` expression within the `PIVOT` will define a `WHEN` branch for each of the unique tuple attribute steps. Each of these `WHEN` branches will apply the rewrite rules for the exclude paths that have additional steps and equivalent tuple attribute or tuple wildcard. An `ELSE` branch will be added to this `CASE` expression which will apply the rewrite rules for the exclude paths with a tuple wildcard at level `i` and additional steps.
+[source,partiql,subs="+{markup-in-source}"]
+----
+-- Let `T` represent the number of unique exclude tuple attrs for paths of length
+-- greater than `i`.
+-- `<v~i~>` and `<attr~i~>` are fresh variables
+WHEN <v~i-1~> IS TUPLE THEN (
+    PIVOT (
+        CASE
+            WHEN <attr~i~> = <exclude path tuple attr~unique1~> THEN
+                -- Apply rewrite rules for exclude paths with
+                -- length > i AND
+                -- tuple attr~unique1~ or tuple wildcard at ith step
+              ⋮
+            WHEN <attr~i~> = <exclude path tuple attr~uniqueT~> THEN
+                -- Apply rewrite rules for exclude paths with
+                -- length > i AND
+                -- tuple attr~uniqueT~ or tuple wildcard at ith step
+            ELSE
+                -- Apply rewrite rules for exclude paths with
+                -- length > i AND
+                -- tuple wildcard at ith step
+        END
+    ) AT <attr~n~>
+    FROM UNPIVOT <v~i-1~> AS <v~i~> AT <attr~i~>
+    WHERE 
+        <attr~i~> NOT IN [<case-sensitive tuple attrs with last step at i>]
+        AND
+        LOWER(<attr~i~>) NOT IN [<case-insensitive tuple attrs with last step at i>] -- call `LOWER` on each of the case-insensitive tuple attrs
+)
+----
+
+=====
+NOTE: If the only applicable path at level `i` is a tuple wildcard and this path is of length `i`, we know there are no other applicable tuple paths by the subsumption rules. In this case, we can just return an empty tuple for the `ith` nested `CASE` like <<anchor-3b, rule 3.b>>:
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~i-1~> IS TUPLE THEN
+    { }
+----
+=====
+---
+
+If any of the applicable `EXCLUDE` paths at level `i` have a collection index or wildcard exclude step, then we add the following `WHEN` branches to the `i`^th^ nested `CASE` expression. If the exclude paths at level `i` are all collection index steps, only a `WHEN` branch casing on if the previous level's value `<v~i-1~>` was an array will be added. Otherwise, a `WHEN` branch casing on if `<v~i-1~>` is a bag will also be added. Alike the collection exclude rules defined for single `EXCLUDE` paths, we add a `SELECT VALUE ... FROM` over `<v~i-1~>`.
+
+Rule 4.b::
+We divide the set of applicable `EXCLUDE` paths into two subsets:
+
+1. paths of length `i` (i.e. final step is `i`)
+2. paths of length greater than `i` (i.e. have additional steps)
+
+If there are any `EXCLUDE` paths of length `i`, then similar to <<anchor-3c, Rule 3.c>>, we add a `WHERE` clause to filter out those fields. The fields to exclude will be grouped together within an array.
+
+(Within the `WHEN IS ARRAY` branch) If there are any `EXCLUDE` paths of length greater than `i`, then similar to <<anchor-2c, Rule 2.c>>, we add a `CASE` expression within the `SELECT VALUE ... AT ... ORDER BY`. This `CASE` expression within the `SELECT VALUE` will define a `WHEN` branch for each of the unique collection index steps. Each of these `WHEN` branches will apply the rewrite rules for the exclude paths that have additional steps and equivalent collection indexes or collection wildcard. An `ELSE` branch will be added to this `CASE` expression which will apply the rewrite rules for the exclude paths with additional steps and collection wildcard.
+
+(Within the `WHEN IS BAG` branch, if applicable) We simply have a `FROM` over `<v~i-1~>` with a `SELECT VALUE` that applies the rewrite rules for exclude paths that have additional steps and collection wildcard at level `i`.
+[source,partiql,subs="+{markup-in-source}"]
+----
+-- Let `C` represent the number of unique exclude collection indexes for exclude paths of length
+-- greater than `i`.
+-- `<v~i~>` and `<idx~i~>` are fresh variables
+WHEN <v~i-1~> IS ARRAY THEN (
+    SELECT VALUE
+        CASE 
+            WHEN <idx~i~> = <exclude path collection idx~unique1~> THEN
+                -- Apply rewrite rules for exclude paths with
+                -- length > i AND
+                -- collection index idx~unique1~ or wildcard at ith step
+              ⋮
+            WHEN <idx~i~> = <exclude path collection idx~uniqueK~> THEN
+                -- Apply rewrite rules for exclude paths with
+                -- length > i AND
+                -- collection index idx~uniqueC~ or wildcard at ith step
+            ELSE 
+                -- Apply rewrite rules for exclude paths with
+                -- length > i AND
+                -- collection wildcard at ith step 
+        END
+    FROM <v~i-1~> AS <v~i~> AT <idx~i~>
+    WHERE <idx~i~> NOT IN [<exclude indexes with last step at i>]
+    ORDER BY <idx~i~>
+)
+WHEN <v~i-1~> IS BAG THEN (
+    SELECT VALUE
+        -- Apply rewrite rules for exclude paths with collection wildcard at ith step
+    FROM <v~i-1~> AS <v~i~>
+)
+----
+
+=====
+NOTE: If the only applicable path at level `i` is a collection wildcard and this path is of length `i`, we know there are no other applicable collection paths by the subsumption rules. In this case, we can just return an empty array or bag for the `ith` nested `CASE` like <<anchor-3d, rule 3.d>>:
+[source,partiql,subs="+{markup-in-source}"]
+----
+WHEN <v~i-1~> IS ARRAY THEN
+    []      -- empty array
+WHEN <v~i-1~> IS BAG THEN
+    <<>>    -- empty bag
+----
+=====
+
+== Examples
+=== Example: tuple attribute as final step
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+EXCLUDE t.a.field_x
+FROM <<
+    {
+        'a': { 'field_x': 0, 'field_y': 'zero' },
+        'b': { 'field_x': 1, 'field_y': 'one' },
+        'c': { 'field_x': 2, 'field_y': 'two' }
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE 
+                WHEN t IS TUPLE THEN (
+                    PIVOT (
+                        CASE 
+                            WHEN LOWER(attr_1) = LOWER('a') THEN
+                                CASE 
+                                    WHEN v_1 IS TUPLE THEN (
+                                        PIVOT v_2 AT attr_2
+                                        FROM UNPIVOT v_1 AS v_2 AT attr_2
+                                        WHERE LOWER(attr_2) NOT IN [LOWER('field_x')]
+                                    )
+                                    ELSE v_1
+                                END
+                            ELSE v_1
+                        END
+                    ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+                )
+                ELSE t
+            END
+    }
+    FROM <<
+    {
+        'a': { 'field_x': 0, 'field_y': 'zero' },
+        'b': { 'field_x': 1, 'field_y': 'one' },
+        'c': { 'field_x': 2, 'field_y': 'two' }
+    }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': {
+      'field_y': 'zero'
+    },
+    'b': {
+      'field_x': 1,
+      'field_y': 'one'
+    },
+    'c': {
+      'field_x': 2,
+      'field_y': 'two'
+    }
+  }
+>>
+----
+
+=== Example: tuple wildcard as final step
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+EXCLUDE t.a.*
+FROM <<
+    {
+        'a': { 'field_x': 0, 'field_y': 'zero' },
+        'b': { 'field_x': 1, 'field_y': 'one' },
+        'c': { 'field_x': 2, 'field_y': 'two' }
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE 
+                WHEN t IS TUPLE THEN (
+                    PIVOT (
+                        CASE 
+                            WHEN LOWER(attr_1) = LOWER('a') THEN
+                                CASE 
+                                    WHEN v_1 IS TUPLE THEN
+                                        {}
+                                    ELSE v_1
+                                END
+                            ELSE v_1
+                        END
+                    ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+                )
+                ELSE t
+            END
+    }
+    FROM <<
+    {
+        'a': { 'field_x': 0, 'field_y': 'zero' },
+        'b': { 'field_x': 1, 'field_y': 'one' },
+        'c': { 'field_x': 2, 'field_y': 'two' }
+    }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': {},
+    'b': {
+      'field_x': 1,
+      'field_y': 'one'
+    },
+    'c': {
+      'field_x': 2,
+      'field_y': 'two'
+    }
+  }
+>>
+----
+
+
+=== Example: tuple wildcard as non-final step
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+EXCLUDE t.*.field_x
+FROM <<
+    {
+        'a': { 'field_x': 0, 'field_y': 'zero' },
+        'b': { 'field_x': 1, 'field_y': 'one' },
+        'c': { 'field_x': 2, 'field_y': 'two' }
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE 
+                WHEN t IS TUPLE THEN (
+                    PIVOT (
+                        CASE 
+                            WHEN v_1 IS TUPLE THEN (
+                                PIVOT v_2 AT attr_2 
+                                FROM UNPIVOT v_1 AS v_2 AT attr_2
+                                WHERE LOWER(attr_2) NOT IN [LOWER('field_x')]
+                            )
+                            ELSE v_1
+                        END
+                    ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+                )
+                ELSE t
+            END
+    }
+    FROM <<
+    {
+        'a': { 'field_x': 0, 'field_y': 'zero' },
+        'b': { 'field_x': 1, 'field_y': 'one' },
+        'c': { 'field_x': 2, 'field_y': 'two' }
+    }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': {
+      'field_y': 'zero'
+    },
+    'b': {
+      'field_y': 'one'
+    },
+    'c': {
+      'field_y': 'two'
+    }
+  }
+>>
+----
+
+=== Example: collection index as final step
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+EXCLUDE t.a[1]
+FROM <<
+    {
+        'a': [
+            { 'field_x': 0, 'field_y': 'zero' },
+            { 'field_x': 1, 'field_y': 'one' },
+            { 'field_x': 2, 'field_y': 'two' }
+        ],
+        'foo': 'bar'
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE 
+                WHEN t IS TUPLE THEN (
+                    PIVOT (
+                        CASE 
+                            WHEN LOWER(attr_1) = LOWER('a') THEN 
+                                CASE 
+                                    WHEN v_1 IS ARRAY THEN (
+                                        SELECT VALUE v_2
+                                        FROM v_1 AS v_2 AT idx_2 
+                                        WHERE idx_2 NOT IN [1] 
+                                        ORDER BY idx_2
+                                    )
+                                    ELSE v_1
+                                END
+                            ELSE v_1
+                        END
+                    )
+                    AT attr_1 
+                    FROM UNPIVOT t AS v_1 AT attr_1
+                )
+                ELSE t
+            END
+    }
+    FROM <<
+        {
+            'a': [
+                { 'field_x': 0, 'field_y': 'zero' },
+                { 'field_x': 1, 'field_y': 'one' },
+                { 'field_x': 2, 'field_y': 'two' }
+            ],
+            'foo': 'bar'
+        }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': [
+      {
+        'field_x': 0,
+        'field_y': 'zero'
+      },
+      {
+        'field_x': 2,
+        'field_y': 'two'
+      }
+    ],
+    'foo': 'bar'
+  }
+>>
+----
+
+
+=== Example: collection wildcard as final step
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+EXCLUDE t.a[*]
+FROM <<
+    {
+        'a': [
+            { 'field_x': 0, 'field_y': 'zero' },
+            { 'field_x': 1, 'field_y': 'one' },
+            { 'field_x': 2, 'field_y': 'two' }
+        ],
+        'foo': 'bar'
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE 
+                WHEN t IS TUPLE THEN (
+                    PIVOT (
+                        CASE 
+                            WHEN LOWER(attr_1) = LOWER('a') THEN 
+                                CASE 
+                                    WHEN v_1 IS ARRAY THEN
+                                        []
+                                    WHEN v_1 IS BAG THEN
+                                        <<>>
+                                    ELSE v_1
+                                END
+                            ELSE v_1
+                        END
+                    )
+                    AT attr_1 
+                    FROM UNPIVOT t AS v_1 AT attr_1
+                )
+                ELSE t
+            END
+    }
+    FROM <<
+        {
+            'a': [
+                { 'field_x': 0, 'field_y': 'zero' },
+                { 'field_x': 1, 'field_y': 'one' },
+                { 'field_x': 2, 'field_y': 'two' }
+            ],
+            'foo': 'bar'
+        }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': [],
+    'foo': 'bar'
+  }
+>>
+----
+
+=== Example: collection index as non-final step
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+EXCLUDE t.a[1].field_x
+FROM <<
+    {
+        'a': [
+            { 'field_x': 0, 'field_y': 'zero' },
+            { 'field_x': 1, 'field_y': 'one' },  -- only `'field_x': 1` is removed
+            { 'field_x': 2, 'field_y': 'two' }
+        ],
+        'foo': 'bar'
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+-- For the sake of line length, omitting some indentation
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': CASE WHEN t IS TUPLE THEN (
+            PIVOT (
+                CASE WHEN LOWER(attr_1) = LOWER('a') THEN 
+                    CASE WHEN v_1 IS ARRAY THEN (
+                        SELECT VALUE
+                            CASE WHEN idx_2 = 1 THEN
+                                CASE WHEN v_2 IS TUPLE THEN (
+                                    PIVOT v_3 AT attr_3
+                                    FROM UNPIVOT v_2 AS v_3 AT attr_3
+                                    WHERE LOWER(attr_3) NOT IN [LOWER('field_x')]
+                                )
+                                ELSE v_2
+                                END
+                            ELSE v_2
+                            END
+                        FROM v_1 AS v_2 AT idx_2 
+                        ORDER BY idx_2
+                    )
+                    ELSE v_1
+                    END
+                ELSE v_1
+                END
+            ) AT attr_1 
+            FROM UNPIVOT t AS v_1 AT attr_1
+        )
+        ELSE t
+        END
+    }
+    FROM <<
+        {
+            'a': [
+                { 'field_x': 0, 'field_y': 'zero' },
+                { 'field_x': 1, 'field_y': 'one' },
+                { 'field_x': 2, 'field_y': 'two' }
+            ],
+            'foo': 'bar'
+        }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': [
+      {
+        'field_x': 0,
+        'field_y': 'zero'
+      },
+      {
+        'field_y': 'one'
+      },
+      {
+        'field_x': 2,
+        'field_y': 'two'
+      }
+    ],
+    'foo': 'bar'
+  }
+>>
+----
+
+
+=== Example: collection wildcard as non-final step
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+EXCLUDE t.a[*].field_x
+FROM <<
+    {
+        'a': [
+            { 'field_x': 0, 'field_y': 'zero' },
+            { 'field_x': 1, 'field_y': 'one' },
+            { 'field_x': 2, 'field_y': 'two' }
+        ],
+        'foo': 'bar'
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': CASE WHEN t IS TUPLE THEN (
+            PIVOT (
+                CASE WHEN LOWER(attr_1) = LOWER('a') THEN 
+                    CASE WHEN v_1 IS ARRAY THEN (
+                        SELECT VALUE 
+                            CASE WHEN v_2 IS TUPLE THEN (
+                                PIVOT v_3 AT attr_3 
+                                FROM UNPIVOT v_2 AS v_3 AT attr_3
+                                WHERE LOWER(attr_3) NOT IN [LOWER('field_x')]
+                            )
+                            ELSE v_2
+                            END
+                        FROM v_1 AS v_2 AT idx_2
+                        ORDER BY idx_2
+                    )
+                    WHEN v_1 IS BAG THEN (
+                        SELECT VALUE 
+                            CASE WHEN v_2 IS TUPLE THEN (
+                                PIVOT v_3 AT attr_3 
+                                FROM UNPIVOT v_2 AS v_3 AT attr_3
+                                WHERE LOWER(attr_3) NOT IN [LOWER('field_x')]
+                            )
+                            ELSE v_2
+                            END
+                        FROM v_1 AS v_2 -- no `AT` or `ORDER BY`
+                    )
+                    ELSE v_1
+                    END
+                ELSE v_1
+                END
+            ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+        )
+        ELSE t
+        END
+    }
+    FROM <<
+        {
+            'a': [
+                { 'field_x': 0, 'field_y': 'zero' },
+                { 'field_x': 1, 'field_y': 'one' },
+                { 'field_x': 2, 'field_y': 'two' }
+            ],
+            'foo': 'bar'
+        }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': [
+      {
+        'field_y': 'zero'
+      },
+      {
+        'field_y': 'one'
+      },
+      {
+        'field_y': 'two'
+      }
+    ],
+    'foo': 'bar'
+  }
+>>
+----
+
+=== Example: multiple binding tuples with `JOIN`
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT *
+EXCLUDE bar.d
+FROM 
+<<
+    {'a': 1, 'b': 11}, 
+    {'a': 2, 'b': 22}
+>> AS foo,
+<<
+    {'c': 3, 'd': 33},
+    {'c': 4, 'd': 44}
+>> AS bar
+----
+
+Rewritten query:
+[source,partiql"]
+----
+SELECT foo.*, bar.*
+FROM (
+    SELECT VALUE {
+        'foo': foo,
+        'bar': 
+            CASE WHEN bar IS TUPLE THEN (
+                PIVOT v AT attr
+                FROM UNPIVOT bar AS v AT attr
+                WHERE LOWER(attr) NOT IN [LOWER('d')]
+            )
+            ELSE bar
+            END
+    }
+    FROM
+    <<
+        {'a': 1, 'b': 11}, 
+        {'a': 2, 'b': 22}
+    >> AS foo,
+    <<
+        {'c': 3, 'd': 33},
+        {'c': 4, 'd': 44}
+    >> AS bar
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': 1,
+    'b': 11,
+    'c': 3,
+  },
+  {
+    'a': 1,
+    'b': 11,
+    'c': 4,
+  },
+  {
+    'a': 2,
+    'b': 22,
+    'c': 3,
+  },
+  {
+    'a': 2,
+    'b': 22,
+    'c': 4,
+  }
+>>
+----
+
+=== Example: EXCLUDE over `FROM UNPIVOT`
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT v, attr
+EXCLUDE v.foo
+FROM UNPIVOT 
+{
+    'a': {'foo': 1, 'bar': 11}, 
+    'a': {'foo': 2, 'bar': 22}, 
+    'b': {'foo': 3, 'bar': 33}
+} AS v AT attr
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT v, attr
+FROM (
+    SELECT VALUE {
+        'v': 
+            CASE WHEN v IS TUPLE THEN (
+                PIVOT v_v AT attr_v
+                FROM UNPIVOT v AS v_v AT attr_v
+                WHERE LOWER(attr_v) NOT IN [LOWER('foo')]
+            )
+            ELSE v
+            END,
+        'attr': attr
+    }
+    FROM UNPIVOT 
+    {
+        'a': {'foo': 1, 'bar': 11}, 
+        'a': {'foo': 2, 'bar': 22}, 
+        'b': {'foo': 3, 'bar': 33}
+    } AS v AT attr
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'v': {
+      'bar': 11
+    },
+    'attr': 'a'
+  },
+  {
+    'v': {
+      'bar': 22
+    },
+    'attr': 'a'
+  },
+  {
+    'v': {
+      'bar': 33
+    },
+    'attr': 'b'
+  }
+>>
+----
+
+
+=== Example: EXCLUDE w/ `ORDER BY`, `LIMIT`, `OFFSET`
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT *
+EXCLUDE t.a
+FROM <<
+    { 'a': 3, 'b': 33, 'c': 333 },  -- kept
+    { 'a': 2, 'b': 22, 'c': 222 },
+    { 'a': 4, 'b': 44, 'c': 444 },  -- kept
+    { 'a': 5, 'b': 55, 'c': 555 },
+    { 'a': 1, 'b': 11, 'c': 111 }
+>> AS t
+ORDER BY a
+LIMIT 2
+OFFSET 2
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE 
+                WHEN t IS TUPLE THEN (
+                    PIVOT v AT attr
+                    FROM UNPIVOT t AS v AT attr
+                    WHERE LOWER(attr) NOT IN [LOWER('a')]
+                )
+                ELSE v
+            END
+    }
+    FROM <<
+        { 'a': 3, 'b': 33, 'c': 333 },  -- kept
+        { 'a': 2, 'b': 22, 'c': 222 },
+        { 'a': 4, 'b': 44, 'c': 444 },  -- kept
+        { 'a': 5, 'b': 55, 'c': 555 },
+        { 'a': 1, 'b': 11, 'c': 111 }
+    >> AS t
+    ORDER BY a
+    LIMIT 2
+    OFFSET 2
+) AS topLevelTbl AT idx
+ORDER BY idx
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+[
+  {
+    'b': 33,
+    'c': 333
+  },
+  {
+    'b': 44,
+    'c': 444
+  }
+]
+----
+
+=== Example: multiple EXCLUDE paths at same level
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT * EXCLUDE t."a", t['b'], t.d, t.e FROM 
+<<
+    {
+        'a': 1,
+        'b': 2,
+        'c': 3, -- only field kept
+        'd': 4,
+        'e': 5
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE
+                WHEN t IS TUPLE THEN (
+                    PIVOT v_1 AT attr_1
+                    FROM UNPIVOT t AS v_1 AT attr_1
+                    WHERE
+                        attr_1 NOT IN ['a', 'b'] AND
+                        LOWER(attr_1) NOT IN [LOWER('d'), LOWER('e')]
+                )
+                ELSE t
+            END
+    }
+    FROM <<
+        {
+            'a': 1, -- `a` excluded
+            'b': 2, -- `b` excluded
+            'c': 3 
+        }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'c': 3
+  }
+>>
+----
+
+
+=== Example: multiple EXCLUDE paths at different levels
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT * EXCLUDE t.a.a1, t.b FROM 
+<<
+    {
+        'a': {
+            'a1': { -- `a1` excluded
+                'a2': 1
+            },
+            'a11': 'foo'
+        }, 
+        'b': 2, -- `b` excluded
+        'c': 3, 
+        'd': 1
+    }
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE 
+                WHEN t IS TUPLE THEN (
+                    PIVOT (
+                        CASE 
+                            WHEN LOWER(attr_1) = LOWER('a') THEN
+                                CASE 
+                                    WHEN v_1 IS TUPLE THEN (
+                                        PIVOT v_2 AT attr_2 
+                                        FROM UNPIVOT v_1 AS v_2 AT attr_2
+                                        WHERE LOWER(attr_2) NOT IN [LOWER('a1')]
+                                    )
+                                    ELSE v_1
+                                END
+                            ELSE v_1
+                        END
+                    ) AT attr_1 
+                    FROM UNPIVOT t AS v_1 AT attr_1 
+                    WHERE LOWER(attr_1) NOT IN [LOWER('b')]
+                )
+                ELSE t
+            END
+    }
+    FROM <<
+        {
+            'a': {
+                'a1': { -- `a1` excluded
+                    'a2': 1
+                },
+                'a11': 'foo'
+            },
+            'b': 2, -- `b` excluded
+            'c': 3,
+            'd': 1
+        }
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': {
+      'a11': 'foo'
+    },
+    'c': 3,
+    'd': 1
+  }
+>>
+----
+
+=== Example: EXCLUDE with different FROM source bindings
+[source,partiql"]
+----
+SELECT *
+EXCLUDE t.a[*].bar, t.a.bar, t.a.*.bar  -- EXCLUDE all `bar`
+FROM 
+<<
+    {'a': [{'foo': 0, 'bar': 1, 'baz': 2}, {'foo': 3, 'bar': 4, 'baz': 5}]},
+    {'a': {'foo': 6, 'bar': 7, 'baz': 8}},
+    {'a': {'a1': {'foo': 9, 'bar': 10, 'baz': 11}, 'a2': {'foo': 12, 'bar': 13, 'baz': 14}}}
+>> AS t
+----
+
+Rewritten query:
+[source,partiql,subs="+{markup-in-source}"]
+----
+SELECT t.*
+FROM (
+    SELECT VALUE {
+        't': 
+            CASE WHEN t IS TUPLE THEN (
+                PIVOT (
+                    CASE WHEN LOWER(attr_1) = LOWER('a') THEN
+                        CASE WHEN v_1 IS TUPLE THEN (
+                            PIVOT (
+                                CASE WHEN v_2 IS TUPLE THEN (
+                                    PIVOT v_3 AT attr_3
+                                    FROM UNPIVOT v_2 AS v_3 AT attr_3
+                                    WHERE LOWER(attr_3) NOT IN [LOWER('bar')]
+                                )
+                                ELSE v_2
+                                END
+                            ) AT attr_2
+                            FROM UNPIVOT v_1 AS v_2 AT attr_2
+                            WHERE LOWER(attr_2) NOT IN [LOWER('bar')]
+                        )
+                        WHEN v_1 IS ARRAY THEN (
+                            SELECT VALUE 
+                                CASE WHEN v_2 IS TUPLE THEN (
+                                    PIVOT v_3 AT attr_3
+                                    FROM UNPIVOT v_2 AS v_3 AT attr_3
+                                    WHERE LOWER(attr_3) NOT IN [LOWER('bar')]
+                                )
+                                ELSE v_2
+                                END
+                            FROM v_1 AS v_2 AT idx_2
+                            ORDER BY idx_2
+                        )
+                        -- WHEN v_1 IS BAG THEN ... 
+                        -- same as for ARRAY but remove `AT` and `ORDER BY`
+                        ELSE v_1
+                        END
+                    ELSE v_1
+                    END
+                ) AT attr_1 FROM UNPIVOT t AS v_1 AT attr_1
+            )
+            ELSE t
+            END
+    }
+    FROM 
+    <<
+        {'a': [{'foo': 0, 'bar': 1, 'baz': 2}, {'foo': 3, 'bar': 4, 'baz': 5}]},
+        {'a': {'foo': 6, 'bar': 7, 'baz': 8}},
+        {'a': {'a1': {'foo': 9, 'bar': 10, 'baz': 11}, 'a2': {'foo': 12, 'bar': 13, 'baz': 14}}}
+    >> AS t
+)
+----
+
+Output:
+[source,partiql,subs="+{markup-in-source}"]
+----
+<<
+  {
+    'a': [
+      {
+        'foo': 0,
+        'baz': 2
+      },
+      {
+        'foo': 3,
+        'baz': 5
+      }
+    ]
+  },
+  {
+    'a': {
+      'foo': 6,
+      'baz': 8
+    }
+  },
+  {
+    'a': {
+      'a1': {
+        'foo': 9,
+        'baz': 11
+      },
+      'a2': {
+        'foo': 12,
+        'baz': 14
+      }
+    }
+  }
+>>
+----
+
+== Drawbacks
+
+`EXCLUDE` (or similar clause) is not part of the SQL or SQL++ standard. If `EXCLUDE` is added in a future standard, it's possible the syntax and semantics may change.
+
+== Rationale and alternatives
+[qanda]
+In the original spec issue (https://github.com/partiql/partiql-spec/issues/39[partiql-spec#39]), `EXCEPT` was included as the keyword for this clause. Why was the keyword `EXCLUDE` chosen?::
+
+`EXCLUDE` was chosen over `EXCEPT` since `EXCEPT` could be confused with the set/bag operator `EXCEPT`. `EXCLUDE` was also chosen by the SQL++ implementation, AsterixDB, through some similar reasoning:
++
+[quote,https://issues.apache.org/jira/browse/ASTERIXDB-3059]
+____
+'EXCLUDE' (used in lieu of 'EXCEPT' to avoid confusion with the set operation)
+____
++
+Also of the databases sampled that have a similar clause (see <<Prior art>>), more had chosen `EXCLUDE` over `EXCEPT`.
+
+Why is `EXCLUDE` modeled as a binding tuple operator as opposed to a value expression?::
+
+We had also considered modeling `EXCLUDE` as a value operation evaluated after the `<select clause>`. Evaluating `EXCLUDE` last could contradict the PartiQL specification's assertion that the `<select clause>` is evaluated last, which may add confusion. There were also some additional edge cases that complicated defining `EXCLUDE` as a value operator. For example, let's look at the following query:
++
+[source,partiql,subs="+{markup-in-source}"]
+SELECT t
+EXCLUDE a
+FROM <<
+    { 'a': 1, 'b': 2}
+>> AS t
++
+For above, we would have expected the exclude path `a` to expand to the fully qualified path `t.a`. But since we're in the value domain and not the binding tuple domain, this expansion would not happen unless other expansions rules were specified over values.
++
+Defining `EXCLUDE` as a binding tuple operation evaluated before the `<select clause>` gives us the flexibility to reuse existing path and variable resolution for the exclude paths.
+
+Why is `EXCLUDE` explained in terms of a syntactic rewrite as opposed to an alternative definition?::
+
+We choose to model `EXCLUDE` as a syntactic rewrite over existing clauses (e.g. `PIVOT`, `UNPIVOT`, `CASE`) as this proves more straightforward to explain as opposed to introducing new functional constructs. In prior revisions of this RFC, we had defined a functional definition of `EXCLUDE`, but this ended up introducing a lot of concepts that are not part of the PartiQL and SQL specifications. The rewrite using existing clauses also aligns with our current operational semantics with respect to not erroring.
+
+Why does `EXCLUDE` not give an evaluation error when an exclude path does not remove anything? Or on data type mismatch (e.g. tuple attribute exclude step on collection)?::
+
+We have opted to not error at evaluation time when `EXCLUDE` does not omit any values or in data type mismatch cases.  It is very possible in the schemaless, semi-structured data domain that our data is missing some fields or has different structures. The idea here is that `EXCLUDE` will guarantee that all values at the exclude path will be omitted from the output binding tuple. This can enable use cases such as <<Example: EXCLUDE with different FROM source bindings>> in which the data we wish to exclude is nested within a heterogeneous set of tuples and collections.
++
+A future RFC could opt to give a warning/error in these cases when schema is present and we know at static time that an `EXCLUDE` path will not omit values. See <<Unresolved questions>> for more discussion on schema.
+
+What is the impact of not doing this?::
+
+PartiQL users have frequently asked us for this capability to omit certain nested fields/collection values. Without `EXCLUDE`, this operation can be very cumbersome to write out and prone to errors (e.g. leaving out a field or incorrect nesting of `PIVOT`/``UNPIVOT``s).
+
+== Prior art
+
+`EXCLUDE` is not part of the SQL standard, though as we will discuss below, several SQL/SQL++ and NoSQL databases have chosen to add some version of this clause.
+
+=== AsterixDB (an implementation of SQL++)
+* Reference: https://nightlies.apache.org/asterixdb/sqlpp/manual.html#Select_exclude
+* Some helpful discussion on the issue of `EXCLUDE` being added to AsterixDB: https://issues.apache.org/jira/browse/ASTERIXDB-3059
+* More info on AsterixDB: https://dbdb.io/db/asterixdb
+
+AsterixDB, an implementation of SQL++, has defined an `EXCLUDE` clause to operate on semi-structured data to omit certain nested tuple fields; however, AsterixDB's definition is limited and does not cover other common use cases involving collections and multi-tuple field exclusions.
+
+Another key difference is that the `EXCLUDE` clause is evaluated on the output of the `SELECT` projection.
+
+Example:
+[source,sql]
+----
+FROM customers AS c
+WHERE c.custid = "C13"
+SELECT c.* EXCLUDE address.zipcode, name;
+----
+Result:
+[source,json]
+----
+[
+    {
+        "custid": "C13",
+        "address": {
+            "street": "201 Main St.",
+            "city": "St. Louis, MO"
+        },
+        "rating": 750
+    }
+]
+----
+
+AsterixDB implements `EXCLUDE` by using a builtin function unique to AsterixDB called `OBJECT_REMOVE_FIELDS`. They perform a rewrite of
+
+[source,sql]
+----
+FROM   Users U1, Friends F
+WHERE  U1.user_id = F.user_id
+SELECT DISTINCT U1.* EXCLUDE address, title;
+----
+Into:
+[source,sql]
+----
+FROM   (
+  FROM   Users U1, Friends F
+  WHERE  U1.user_id = F.user_id
+  SELECT U1.* // DISTINCT gets pushed to outer query.
+) TMP
+SELECT DISTINCT VALUE OBJECT_REMOVE_FIELDS(TMP, ["address", "title"]);
+----
+
+=== Google's BigQuery
+* Reference: https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#select_except
+* More info on BigQuery: https://dbdb.io/db/bigquery
+
+Uses `SELECT * EXCEPT` to specify the names of one or more columns to exclude from the result. All matching column names are omitted from the output.
+
+[source,sql]
+----
+WITH orders AS
+  (SELECT 5 as order_id,
+  "sprocket" as item_name,
+  200 as quantity)
+SELECT * EXCEPT (order_id)
+FROM orders;
+/*-----------+----------*
+ | item_name | quantity |
+ +-----------+----------+
+ | sprocket  | 200      |
+ *-----------+----------*/
+----
+
+=== Snowflake
+* Reference: https://docs.snowflake.com/en/sql-reference/sql/select#selecting-all-columns-except-one-column
+* More info on Snowflake: https://dbdb.io/db/snowflake
+
+`SELECT * EXCLUDE` specifies the columns that should be excluded from the results. 
+
+
+[source,sql]
+----
+SELECT * EXCLUDE (department_id, employee_id) FROM employee_table;
+
++------------+------------+
+| LAST_NAME  | FIRST_NAME |
+|------------+------------|
+| Montgomery | Pat        |
+| Levine     | Terry      |
+| Comstock   | Dana       |
++------------+------------+
+----
+
+Also allows for selecting across multiple tables through repeated use of `EXCLUDE`:
+
+[source,sql]
+----
+SELECT table_a.* EXCLUDE column_in_table_a ,
+table_b.* EXCLUDE column_in_table_b
+...
+----
+
+=== DuckDB
+* Reference: https://duckdb.org/docs/sql/query_syntax/select
+* More info on DuckDB: https://dbdb.io/db/duckdb
+
+`SELECT * EXCLUDE` selects all the columns except the provided columns.
+
+[source,sql]
+----
+-- select all columns except the city column from the addresses table
+SELECT * EXCLUDE (city) FROM addresses;
+----
+
+=== Databricks
+* Reference: https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-qry-select.html#syntax
+
+Uses `SELECT * EXCEPT` to prune columns or fields from the referencable set of columns identified in the select_star clause. Worth mentioning that:
+
+Each name must reference a column included in the set of columns that you can reference or their fields. Otherwise, Databricks SQL raises a `UNRESOLVED_COLUMN` error. If names overlap or are not unique, Databricks SQL raises an `EXCEPT_OVERLAPPING_COLUMNS` error.
+
+
+Some examples:
+[source,sql]
+----
+-- select all referencable columns from all tables except t2.c4
+> SELECT * EXCEPT(c4) FROM VALUES(1, 2) AS t1(c1, c2), VALUES(3, 4) AS t2(c3, c4);
+  1   2   3
+
+-- select all referencable columns from a table, except a nested field.
+> SELECT * EXCEPT(c2.b) FROM VALUES(1, named_struct('a', 2, 'b', 3)) AS t(c1, c2);
+  1  { "a" : 2 }
+
+-- Removing all fields results in an empty struct
+> SELECT * EXCEPT(c2.b, c2.a) FROM VALUES(1, named_struct('a', 2, 'b', 3)) AS t(c1, c2);
+  1  { }
+
+-- Overlapping names result in an error
+> SELECT * EXCEPT(c2, c2.a) FROM VALUES(1, named_struct('a', 2, 'b', 3)) AS t(c1, c2);
+  Error: EXCEPT_OVERLAPPING_COLUMNS
+----
+
+=== MongoDB
+* Reference: https://www.mongodb.com/docs/manual/tutorial/project-fields-from-query-results/#return-all-but-the-excluded-fields
+* More info on MongoDB: https://dbdb.io/db/mongodb
+
+MongoDB supports excluding certain fields by setting the attribute's value to `0`. The following returns all fields other than the `status` and `instock` field for all of the matching documents.
+
+[source,shell]
+----
+db.inventory.find( { status: "A" }, { status: 0, instock: 0 } )
+----
+
+== Unresolved questions
+
+[qanda]
+What related issues do you consider out of scope for this RFC that could be addressed in the future independently of the solution that comes out of this RFC?::
+This RFC describes ``EXCLUDE``'s behavior during evaluation time without schema. A future RFC could clarify ``EXCLUDE``'s behavior in the presence of schema, including
+* `EXCLUDE` on a tuple attribute that does not exist
+* `EXCLUDE` tuple step on a collection or collection step on a tuple
+* `EXCLUDE` on a collection index out of bounds
+* `EXCLUDE` collection index on a bag
+* `EXCLUDE` on a tuple attribute with duplicates
+* `EXCLUDE` with redundant steps  
+
++
+Currently, the above cases are permitted by the rewrite rules specified in this RFC and do not provide an error. A future RFC could define whether the above cases warrant a different behavior in the presence of schema (e.g. permit vs warning vs error).
+
+
+== Future possibilities
+
+=== Extensions to the syntax
+`EXCLUDE` path syntax beyond the tuple attribute, tuple wildcard, collection index, and collection wildcard presented in this RFC could enable some other use cases. 
+
+For example, suppose we wanted to exclude an attribute for a specific range of collection indices. With this RFC's supported syntax, a user would need to specify an `EXCLUDE` path for each of the indices
+
+[source,sql]
+----
+-- For example to exclude `field` for only the 0th through 42nd indices of `t.a`
+-- User would need to specify a path for each of the indices
+EXCLUDE t.a[0].field, t.a[1].field, ..., t.a[42].field
+----
+
+This could be simplified using a hypothetical syntax such as
+[source,sql]
+----
+EXCLUDE t.a[0:42].field
+----
+
+=== Similar clauses to `EXCLUDE`
+In the original PartiQL spec issue (https://github.com/partiql/partiql-spec/issues/39[partiql-spec#39]), `REPLACE` was mentioned as another helpful clause to transform PartiQL values before projection. https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#select_replace[Google's BigQuery] supports such a similar clause.
+
+=== Support for `EXCLUDE` on graph components
+https://github.com/partiql/partiql-docs/blob/main/RFCs/0025-graph-data-model.md[RFC-#25] defined the graph model addition to the PartiQL value system. If possible, we could see if there's some similar GPML concept to exclude certain nodes, edges, ends, labels, or payload.
